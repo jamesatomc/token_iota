@@ -6,6 +6,7 @@ edition = "2024" # edition = "legacy" to use legacy (pre-2024) Move
 
 [dependencies]
 Iota = { git = "https://github.com/iotaledger/iota.git", subdir = "crates/iota-framework/packages/iota-framework", rev = "framework/mainnet" }
+MoveStdlib = { git = "https://github.com/iotaledger/iota.git", subdir = "crates/iota-framework/packages/move-stdlib", rev = "framework/mainnet" }
 
 [addresses]
 token = "0x0"

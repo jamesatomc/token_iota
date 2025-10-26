@@ -2,10 +2,11 @@
 
 [move]
 version = 3
-manifest_digest = "7FA3A363E85418719B938E0C81EDC47FF7C562795EA7020EEF36D10D767F2E54"
-deps_digest = "F8BBB0CCB2491CA29A3DF03D6F92277A4F3574266507ACD77214D37ECA3F3082"
+manifest_digest = "42A4A078735BE5E03A476A820A76145CD5C2E1D83F121A415BE95240ADCBCA80"
+deps_digest = "3C4103934B1E040BB6B23F1D610B4EF9F2F1166A50A104EADCF77467C004C600"
 dependencies = [
   { id = "Iota", name = "Iota" },
+  { id = "MoveStdlib", name = "MoveStdlib" },
 ]
 
 [[move.package]]
@@ -19,3 +20,16 @@ dependencies = [
 [[move.package]]
 id = "MoveStdlib"
 source = { git = "https://github.com/iotaledger/iota.git", rev = "framework/mainnet", subdir = "crates\\iota-framework\\packages\\move-stdlib" }
+
+[move.toolchain-version]
+compiler-version = "1.9.2-rc"
+edition = "2024"
+flavor = "iota"
+
+[env]
+
+[env.testnet]
+chain-id = "2304aa97"
+original-published-id = "0x9067b08bed29cd5d6a2a582731832f35f99e509393f237ca1ef542ddf631e801"
+latest-published-id = "0x9067b08bed29cd5d6a2a582731832f35f99e509393f237ca1ef542ddf631e801"
+published-version = "1"
