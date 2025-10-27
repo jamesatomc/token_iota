@@ -1,5 +1,5 @@
 [package]
-name = "token"
+name = "KanariNetwork"
 edition = "2024" # edition = "legacy" to use legacy (pre-2024) Move
 # license = ""           # e.g., "MIT", "GPL", "Apache 2.0"
 # authors = ["..."]      # e.g., ["Joe Smith (joesmith@noemail.com)", "John Snow (johnsnow@noemail.com)"]
@@ -9,7 +9,7 @@ Iota = { git = "https://github.com/iotaledger/iota.git", subdir = "crates/iota-f
 MoveStdlib = { git = "https://github.com/iotaledger/iota.git", subdir = "crates/iota-framework/packages/move-stdlib", rev = "framework/mainnet" }
 
 [addresses]
-token = "0x0"
+kanari_network = "0x0"
 
 
 
