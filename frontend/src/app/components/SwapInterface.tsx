@@ -36,7 +36,7 @@ export default function SwapInterface() {
       if (isXtoY) {
         // Swap KANARI to IOTA
         tx.moveCall({
-          target: `${CONTRACTS.PACKAGE_ID}::${MODULES.DEX}::${DEX_FUNCTIONS.SWAP_X_TO_Y}`,
+          target: `${CONTRACTS.PACKAGE_ID}::${MODULES.DEX_FACTORY}::${DEX_FUNCTIONS.SWAP_X_TO_Y}`,
           arguments: [
             tx.object(poolId),
             tx.object(amountInParsed), // coin_in
@@ -47,7 +47,7 @@ export default function SwapInterface() {
       } else {
         // Swap IOTA to KANARI
         tx.moveCall({
-          target: `${CONTRACTS.PACKAGE_ID}::${MODULES.DEX}::${DEX_FUNCTIONS.SWAP_Y_TO_X}`,
+          target: `${CONTRACTS.PACKAGE_ID}::${MODULES.DEX_FACTORY}::${DEX_FUNCTIONS.SWAP_Y_TO_X}`,
           arguments: [
             tx.object(poolId),
             tx.object(amountInParsed), // coin_in

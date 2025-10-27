@@ -1,7 +1,7 @@
 module kanari_network::DEX;
 
 use iota::balance::{Self, Balance};
-use iota::coin::{Self, TreasuryCap, Coin};
+use iota::coin::{Self, Coin};
 use iota::event;
 
 
@@ -24,8 +24,11 @@ const BASIS_POINTS: u64 = 10000;
 // Minimum liquidity locked forever (prevent division by zero attacks)
 const MINIMUM_LIQUIDITY: u64 = 1000;
 
-/// Witness for creating LP token
-public struct LP<phantom X, phantom Y> has drop {}
+/// LP Token receipt - proves liquidity ownership
+public struct LPToken<phantom X, phantom Y> has key, store {
+    id: UID,
+    amount: u64,
+}
 
 /// Liquidity pool holding two tokens
 public struct LiquidityPool<phantom X, phantom Y> has key {
@@ -36,10 +39,9 @@ public struct LiquidityPool<phantom X, phantom Y> has key {
     lp_supply: u64,
 }
 
-/// Pool registry to store LP token treasury cap
+/// Pool registry
 public struct PoolRegistry<phantom X, phantom Y> has key {
     id: UID,
-    lp_treasury: TreasuryCap<LP<X, Y>>,
 }
 
 // Events
@@ -73,21 +75,6 @@ public struct Swap has copy, drop {
 public fun create_pool<X, Y>(fee_bps: u64, ctx: &mut TxContext) {
     assert!(fee_bps == FEE_LOW || fee_bps == FEE_MED || fee_bps == FEE_HIGH, E_INVALID_FEE);
 
-    // Create LP token currency
-    let lp_witness = LP<X, Y> {};
-    let (lp_treasury, metadata) = coin::create_currency(
-        lp_witness,
-        9, // decimals
-        b"LP",
-        b"Liquidity Pool Token",
-        b"LP token for Kanari Network DEX",
-        option::none(),
-        ctx,
-    );
-
-    // Share the metadata
-    transfer::public_freeze_object(metadata);
-
     let pool = LiquidityPool<X, Y> {
         id: object::new(ctx),
         balance_x: balance::zero(),
@@ -98,10 +85,9 @@ public fun create_pool<X, Y>(fee_bps: u64, ctx: &mut TxContext) {
 
     let pool_id = object::uid_to_address(&pool.id);
 
-    // Create registry to store treasury cap
+    // Create registry (simplified, no treasury cap)
     let registry = PoolRegistry<X, Y> {
         id: object::new(ctx),
-        lp_treasury,
     };
 
     event::emit(PoolCreated {
@@ -145,12 +131,11 @@ fun sqrt(y: u64): u64 {
 // Add liquidity to pool with slippage protection
 public fun add_liquidity<X, Y>(
     pool: &mut LiquidityPool<X, Y>,
-    registry: &mut PoolRegistry<X, Y>,
     coin_x: Coin<X>,
     coin_y: Coin<Y>,
     min_lp_amount: u64, // Slippage protection
     ctx: &mut TxContext,
-): Coin<LP<X, Y>> {
+): LPToken<X, Y> {
     let amount_x = coin::value(&coin_x);
     let amount_y = coin::value(&coin_y);
 
@@ -171,12 +156,7 @@ public fun add_liquidity<X, Y>(
         let initial_lp = sqrt(product);
         assert!(initial_lp > MINIMUM_LIQUIDITY, E_MIN_LIQUIDITY);
 
-        // Lock minimum liquidity forever by minting to zero address
-        let min_lp = coin::mint(&mut registry.lp_treasury, MINIMUM_LIQUIDITY, ctx);
-        transfer::public_transfer(min_lp, @0x0);
-
-        // CRITICAL: Update total supply to include burned LP for correct accounting
-        // This ensures withdraw ratios remain correct
+        // Update total supply to include minimum liquidity
         pool.lp_supply = initial_lp;
 
         // Return only the user's share (excluding burned portion)
@@ -217,20 +197,24 @@ public fun add_liquidity<X, Y>(
         lp_minted: lp_amount,
     });
 
-    // Mint and return LP tokens
-    coin::mint(&mut registry.lp_treasury, lp_amount, ctx)
+    // Return LP token receipt
+    LPToken<X, Y> {
+        id: object::new(ctx),
+        amount: lp_amount,
+    }
 }
 
 // Remove liquidity from pool with slippage protection
 public fun remove_liquidity<X, Y>(
     pool: &mut LiquidityPool<X, Y>,
-    registry: &mut PoolRegistry<X, Y>,
-    lp_token: Coin<LP<X, Y>>,
+    lp_token: LPToken<X, Y>,
     min_amount_x: u64, // Slippage protection
     min_amount_y: u64, // Slippage protection
     ctx: &mut TxContext,
 ): (Coin<X>, Coin<Y>) {
-    let lp_amount = coin::value(&lp_token);
+    let LPToken { id, amount: lp_amount } = lp_token;
+    object::delete(id);
+    
     assert!(lp_amount > 0, E_ZERO_AMOUNT);
 
     // Defensive: ensure pool has LP supply (prevents division by zero)
@@ -251,9 +235,6 @@ public fun remove_liquidity<X, Y>(
 
     // Update pool state
     pool.lp_supply = pool.lp_supply - lp_amount;
-
-    // Burn LP tokens
-    coin::burn(&mut registry.lp_treasury, lp_token);
 
     // Withdraw tokens
     let coin_x = coin::from_balance(

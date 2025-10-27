@@ -1,13 +1,13 @@
 // Contract addresses and configuration
 export const CONTRACTS = {
   // Replace with your deployed package ID
-  PACKAGE_ID: "0xea1dd0a8298453ebabf41c8812528d196d7de8e814771ed999ae5de8f617f6a8",
+  PACKAGE_ID: "0x965b10655efe7b8098a28f74a0e9297b71ec5fe3cac5ad5bb59dab8b0581ce36",
   
   // KANARI Token
   KANARI: {
-    TREASURY_CAP: "0x54863fa8d09a9c99182794854ef9afc2ad283f866459152e800826bf3cc1d255",
-    METADATA: "0x9c3bb41bdb28d2622c1ca21db766961205d25557eb45427556dd7ad6d48dd41b",
-    TYPE: "0xea1dd0a8298453ebabf41c8812528d196d7de8e814771ed999ae5de8f617f6a8::kanari::KANARI",
+    TREASURY_CAP: "0xd1ba1db0c44e3aa78fa8bdc21c4b5308d255f030a8bf66f3f4499673ea5ed24f",
+    METADATA: "0x85338db75074f5037708bdec128af3c4986ecf8845c7681d34c3a696163adadc",
+    TYPE: "0x965b10655efe7b8098a28f74a0e9297b71ec5fe3cac5ad5bb59dab8b0581ce36::kanari::KANARI",
   },
   
   // IOTA Token

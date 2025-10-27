@@ -35,7 +35,7 @@ export default function LiquidityInterface() {
       const minLpAmount = parseAmount((estimatedLP * (1 - parseFloat(slippage) / 100)).toString());
 
       tx.moveCall({
-        target: `${CONTRACTS.PACKAGE_ID}::${MODULES.DEX}::${DEX_FUNCTIONS.ADD_LIQUIDITY}`,
+        target: `${CONTRACTS.PACKAGE_ID}::${MODULES.DEX_FACTORY}::${DEX_FUNCTIONS.ADD_LIQUIDITY}`,
         arguments: [
           tx.object(poolId),
           tx.object(amountXParsed), // coin_x
@@ -87,7 +87,7 @@ export default function LiquidityInterface() {
       const minAmountY = "0";
 
       tx.moveCall({
-        target: `${CONTRACTS.PACKAGE_ID}::${MODULES.DEX}::${DEX_FUNCTIONS.REMOVE_LIQUIDITY}`,
+        target: `${CONTRACTS.PACKAGE_ID}::${MODULES.DEX_FACTORY}::${DEX_FUNCTIONS.REMOVE_LIQUIDITY}`,
         arguments: [
           tx.object(poolId),
           tx.object(lpAmountParsed), // lp_token
