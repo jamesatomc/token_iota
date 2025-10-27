@@ -72,10 +72,10 @@ Examples (replace placeholders):
 
 ```powershell
 # Default (CLI will auto-select gas coin if available)
-iota client call --package 0x9067b08bed29cd5d6a2a582731832f35f99e509393f237ca1ef542ddf631e801 --module kanari --function mint --args 0xTREASURY_OBJECT_ID 1000000000 0xRECIPIENT_ADDRESS
+iota client call --package 0xf56ba6ae7dd999566d7f303df4cec6020d4e0880eb6b923a4f4b0ba9cc918fc8 --module kanari --function mint --args 0xTREASURY_OBJECT_ID 1000000000 0xRECIPIENT_ADDRESS
 
 # Explicit gas object (if signer has no suitable native coin)
-iota client call --package 0x9067b08bed29cd5d6a2a582731832f35f99e509393f237ca1ef542ddf631e801 --module kanari --function mint --args 0xTREASURY_OBJECT_ID 1000000000 0xRECIPIENT_ADDRESS --gas-budget 1000000
+iota client call --package 0xf56ba6ae7dd999566d7f303df4cec6020d4e0880eb6b923a4f4b0ba9cc918fc8 --module kanari --function mint --args 0xTREASURY_OBJECT_ID 1000000000 0xRECIPIENT_ADDRESS --gas-budget 1000000
 
 # Specify sender address (must have private key in keystore)
 iota client call --package <pkg> --module kanari --function mint --args 0xTREASURY_OBJECT_ID 1000000000 0xRECIPIENT_ADDRESS --sender 0xSENDER_ADDRESS
@@ -111,10 +111,10 @@ Examples (replace placeholders):
 
 ```powershell
 # Default (CLI will auto-select gas coin if available)
-iota client call --package 0x9067b08bed29cd5d6a2a582731832f35f99e509393f237ca1ef542ddf631e801 --module kanari --function mint --args 0xTREASURY_OBJECT_ID 1000000000 0xRECIPIENT_ADDRESS
+iota client call --package 0xf56ba6ae7dd999566d7f303df4cec6020d4e0880eb6b923a4f4b0ba9cc918fc8 --module kanari --function mint --args 0xTREASURY_OBJECT_ID 1000000000 0xRECIPIENT_ADDRESS
 
 # Explicit gas object (if signer has no suitable native coin)
-iota client call --package 0x9067b08bed29cd5d6a2a582731832f35f99e509393f237ca1ef542ddf631e801 --module kanari --function mint --args 0xTREASURY_OBJECT_ID 1000000000 0xRECIPIENT_ADDRESS --gas-budget 1000000
+iota client call --package 0xf56ba6ae7dd999566d7f303df4cec6020d4e0880eb6b923a4f4b0ba9cc918fc8 --module kanari --function mint --args 0xTREASURY_OBJECT_ID 1000000000 0xRECIPIENT_ADDRESS --gas-budget 1000000
 
 # Specify sender address (must have private key in keystore)
 iota client call --package <pkg> --module kanari --function mint --args 0xTREASURY_OBJECT_ID 1000000000 0xRECIPIENT_ADDRESS --sender 0xSENDER_ADDRESS
