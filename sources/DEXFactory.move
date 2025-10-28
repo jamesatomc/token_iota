@@ -6,10 +6,7 @@ use kanari_network::DEX::{Self, LiquidityPool, LPToken};
 
 /// Create a new liquidity pool with specified fee
 /// This is the main entry point from UI
-public entry fun create_pool<X, Y>(
-    fee_bps: u64,
-    ctx: &mut TxContext,
-) {
+public entry fun create_pool<X, Y>(fee_bps: u64, ctx: &mut TxContext) {
     DEX::create_pool<X, Y>(fee_bps, ctx);
 }
 
@@ -26,7 +23,7 @@ public entry fun add_liquidity<X, Y>(
         coin_x,
         coin_y,
         min_lp_out,
-        ctx
+        ctx,
     );
     transfer::public_transfer(lp_token, ctx.sender());
 }
@@ -44,7 +41,7 @@ public entry fun remove_liquidity<X, Y>(
         lp_token,
         min_x_out,
         min_y_out,
-        ctx
+        ctx,
     );
     transfer::public_transfer(coin_x, ctx.sender());
     transfer::public_transfer(coin_y, ctx.sender());
