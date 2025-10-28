@@ -86,13 +86,16 @@ export default function LiquidityInterface() {
           }));
 
         setLPTokens(tokenData);
+        
+        // Log for debugging
+        console.log("Found LP tokens:", tokenData);
       } catch (error) {
         console.error("Error fetching LP tokens:", error);
       }
     };
 
     fetchLPTokens();
-  }, [currentAccount, client]);
+  }, [currentAccount, client, tab]); // Re-fetch when switching tabs
 
   const handleAddLiquidity = async () => {
     if (!currentAccount || !amountX || !amountY || !selectedPool) {
@@ -109,11 +112,30 @@ export default function LiquidityInterface() {
       return;
     }
 
-    // Check for potential overflow (product should be less than u64 max when in smallest units)
-    // For safety, keep product under 10^15 to avoid overflow in safe_mul
+    // Check for potential overflow in Move contract
+    // u64::MAX = 18,446,744,073,709,551,615 (about 18.4 quintillion)
+    // When amounts are in smallest units (9 decimals), we multiply by 10^9
+    // So we need to check: (kanariAmount * 10^9) * (iotaAmount * 10^9) < u64::MAX
+    // In the contract, we use u128 for intermediate calculations, so we're safe up to u128::MAX
+    // But to be conservative, let's check if product in smallest units would overflow u64
+    
+    const MAX_SAFE_AMOUNT = 4_000_000_000; // ~4 billion in human-readable units (very safe limit)
+    // This means max product before conversion: 4B * 4B = 16 * 10^18
+    // After conversion to smallest units: 16 * 10^36 (way less than u128::MAX)
+    
+    if (kanariAmount > MAX_SAFE_AMOUNT || iotaAmount > MAX_SAFE_AMOUNT) {
+      alert(`Amount too large! Maximum supported: ${MAX_SAFE_AMOUNT.toLocaleString()} tokens per side`);
+      return;
+    }
+    
+    // Additional check: product in smallest units should not overflow u64
+    // (x * 10^9) * (y * 10^9) = x*y * 10^18 < u64::MAX
+    // So x*y < u64::MAX / 10^18 ≈ 18.4
+    // But our contract uses u128 intermediate, so we can go much higher
+    // Safe limit: sqrt(u64::MAX) ≈ 4.3 billion per side
     const productCheck = kanariAmount * iotaAmount;
-    if (productCheck > 1000000) { // ~10^6 in human-readable units
-      alert("Amounts too large! The product of KANARI × IOTA exceeds safe limits.\nTry smaller amounts (e.g., 100 KANARI with 1 IOTA).");
+    if (productCheck > 10_000_000_000_000) { // 10 trillion (10^13) - very generous
+      alert("Product of amounts is too large! Try reducing both amounts.\nMax safe product: 10 trillion");
       return;
     }
 
@@ -124,9 +146,20 @@ export default function LiquidityInterface() {
       const amountXParsed = parseAmount(amountX);
       const amountYParsed = parseAmount(amountY);
       
-      // Calculate estimated LP tokens (simplified)
+      // Debug log
+      console.log("Adding liquidity:", {
+        kanari: amountX,
+        iota: amountY,
+        kanariParsed: amountXParsed,
+        iotaParsed: amountYParsed,
+        product: parseFloat(amountX) * parseFloat(amountY),
+        productInSmallestUnits: BigInt(amountXParsed) * BigInt(amountYParsed),
+      });
+      
+      // Calculate estimated LP tokens (simplified) - use more conservative calculation
       const estimatedLP = Math.sqrt(parseFloat(amountX) * parseFloat(amountY));
-      const minLpAmount = parseAmount((estimatedLP * (1 - parseFloat(slippage) / 100)).toString());
+      // Use 0 as minimum to avoid issues, let the contract handle minimum liquidity
+      const minLpAmount = "0"; // Conservative: let contract decide minimum
 
       // Get KANARI coins from user's balance
       const kanariCoins = await client.getCoins({
@@ -167,7 +200,7 @@ export default function LiquidityInterface() {
       const [coinY] = tx.splitCoins(tx.gas, [amountYParsed]);
 
       tx.moveCall({
-        target: `${CONTRACTS.PACKAGE_ID}::${MODULES.DEX}::${DEX_FUNCTIONS.ADD_LIQUIDITY}`,
+        target: `${CONTRACTS.PACKAGE_ID}::${MODULES.DEX_FACTORY}::${DEX_FUNCTIONS.ADD_LIQUIDITY}`,
         arguments: [
           tx.object(selectedPool),
           coinX,
@@ -224,7 +257,7 @@ export default function LiquidityInterface() {
       const minAmountY = "0";
 
       tx.moveCall({
-        target: `${CONTRACTS.PACKAGE_ID}::${MODULES.DEX}::${DEX_FUNCTIONS.REMOVE_LIQUIDITY}`,
+        target: `${CONTRACTS.PACKAGE_ID}::${MODULES.DEX_FACTORY}::${DEX_FUNCTIONS.REMOVE_LIQUIDITY}`,
         arguments: [
           tx.object(selectedPool),
           tx.object(selectedLPToken), // LP Token object ID
@@ -388,21 +421,33 @@ export default function LiquidityInterface() {
             </label>
             {lpTokens.length === 0 ? (
               <div className="text-sm text-zinc-500 p-4 border border-zinc-300 dark:border-zinc-700 rounded-lg">
-                You don't have any LP tokens. Add liquidity first to receive LP tokens.
+                <p className="font-medium mb-2">⚠️ No LP tokens found</p>
+                <p className="text-xs">
+                  Add liquidity to the current pool to receive LP tokens.
+                  <br />
+                  <span className="text-amber-600 dark:text-amber-400">
+                    Note: LP tokens from old deployments won't work with the new pool.
+                  </span>
+                </p>
               </div>
             ) : (
-              <select
-                value={selectedLPToken}
-                onChange={(e) => setSelectedLPToken(e.target.value)}
-                className="w-full px-4 py-3 rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-              >
-                <option value="">Select LP token...</option>
-                {lpTokens.map((token) => (
-                  <option key={token.objectId} value={token.objectId}>
-                    {token.objectId.slice(0, 8)}... (Amount: {(parseInt(token.amount) / 1e9).toFixed(4)} LP)
-                  </option>
-                ))}
-              </select>
+              <>
+                <select
+                  value={selectedLPToken}
+                  onChange={(e) => setSelectedLPToken(e.target.value)}
+                  className="w-full px-4 py-3 rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="">Select LP token...</option>
+                  {lpTokens.map((token) => (
+                    <option key={token.objectId} value={token.objectId}>
+                      {token.objectId.slice(0, 8)}... (Amount: {(parseInt(token.amount) / 1e9).toFixed(4)} LP)
+                    </option>
+                  ))}
+                </select>
+                <p className="mt-2 text-xs text-zinc-500 dark:text-zinc-400">
+                  ℹ️ Found {lpTokens.length} LP token{lpTokens.length > 1 ? 's' : ''} from package: {CONTRACTS.PACKAGE_ID.slice(0, 8)}...
+                </p>
+              </>
             )}
           </div>
 

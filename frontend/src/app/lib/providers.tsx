@@ -9,12 +9,7 @@ const { networkConfig } = createNetworkConfig({
   localnet: { url: getFullnodeUrl('localnet'), },
   mainnet: { url: getFullnodeUrl('mainnet'), },
   devnet: { url: getFullnodeUrl('devnet'), },
-  testnet: {
-    url: getFullnodeUrl('testnet'),
-    variables: {
-      packageId: "0xe5699c0b8ba890ee2e4300e3ac9ca0bfe232c1faad0d3bf6d0043f980cafdcc6",
-    },
-  },
+  testnet: { url: getFullnodeUrl('testnet'), },
 });
 
 const queryClient = new QueryClient();

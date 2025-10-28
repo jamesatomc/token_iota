@@ -61,7 +61,7 @@ export default function SwapInterface() {
         const [coinIn] = tx.splitCoins(tx.object(primaryKanariCoin.coinObjectId), [amountInParsed]);
 
         tx.moveCall({
-          target: `${CONTRACTS.PACKAGE_ID}::${MODULES.DEX}::${DEX_FUNCTIONS.SWAP_X_TO_Y}`,
+          target: `${CONTRACTS.PACKAGE_ID}::${MODULES.DEX_FACTORY}::${DEX_FUNCTIONS.SWAP_X_TO_Y}`,
           arguments: [
             tx.object(poolId),
             coinIn,
@@ -74,7 +74,7 @@ export default function SwapInterface() {
         const [coinIn] = tx.splitCoins(tx.gas, [amountInParsed]);
 
         tx.moveCall({
-          target: `${CONTRACTS.PACKAGE_ID}::${MODULES.DEX}::${DEX_FUNCTIONS.SWAP_Y_TO_X}`,
+          target: `${CONTRACTS.PACKAGE_ID}::${MODULES.DEX_FACTORY}::${DEX_FUNCTIONS.SWAP_Y_TO_X}`,
           arguments: [
             tx.object(poolId),
             coinIn,

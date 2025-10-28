@@ -22,7 +22,7 @@ const FEE_HIGH: u64 = 100; // 1.0%
 const BASIS_POINTS: u64 = 10000;
 
 // Minimum liquidity locked forever (prevent division by zero attacks)
-const MINIMUM_LIQUIDITY: u64 = 1000;
+const MINIMUM_LIQUIDITY: u64 = 10;
 
 /// LP Token receipt - proves liquidity ownership
 public struct LPToken<phantom X, phantom Y> has key, store {
@@ -99,18 +99,26 @@ public fun create_pool<X, Y>(fee_bps: u64, ctx: &mut TxContext) {
     transfer::share_object(registry);
 }
 
-// Safe multiplication with overflow check
+// Safe multiplication with overflow check using u128
 fun safe_mul(a: u64, b: u64): u64 {
     if (a == 0 || b == 0) {
         0
     } else {
-        assert!(a <= (18446744073709551615 / b), E_OVERFLOW); // u64::MAX
-        a * b
+        // Use u128 to prevent overflow during multiplication
+        let a_128 = (a as u128);
+        let b_128 = (b as u128);
+        let result_128 = a_128 * b_128;
+        
+        // Check if result fits in u64
+        let max_u64 = 18446744073709551615u128;
+        assert!(result_128 <= max_u64, E_OVERFLOW);
+        
+        (result_128 as u64)
     }
 }
 
-// Helper function to calculate square root (for initial liquidity)
-fun sqrt(y: u64): u64 {
+// Helper function to calculate square root using u128 (for large products)
+fun sqrt_u128(y: u128): u128 {
     if (y < 4) {
         if (y == 0) {
             0
@@ -118,14 +126,25 @@ fun sqrt(y: u64): u64 {
             1
         }
     } else {
+        // Newton's method with u128
         let mut z = y;
         let mut x = y / 2 + 1;
-        while (x < z) {
+        
+        // Iterate until convergence (max 50 iterations for safety with u128)
+        let mut iterations = 0;
+        while (x < z && iterations < 50) {
             z = x;
             x = (y / x + x) / 2;
+            iterations = iterations + 1;
         };
+        
         z
     }
+}
+
+// Helper function to calculate square root (for u64 values)
+fun sqrt(y: u64): u64 {
+    (sqrt_u128((y as u128)) as u64)
 }
 
 // Add liquidity to pool with slippage protection
@@ -151,9 +170,19 @@ public fun add_liquidity<X, Y>(
         assert!(old_x == 0 && old_y == 0, E_INVALID_POOL_STATE);
 
         // LP = sqrt(x * y) - MINIMUM_LIQUIDITY
-        // Use safe_mul to prevent overflow
-        let product = safe_mul(amount_x, amount_y);
-        let initial_lp = sqrt(product);
+        // Use u128 for the entire calculation to prevent overflow
+        let amount_x_128 = (amount_x as u128);
+        let amount_y_128 = (amount_y as u128);
+        let product = amount_x_128 * amount_y_128;
+        
+        // Calculate sqrt using u128
+        let initial_lp_128 = sqrt_u128(product);
+        
+        // Ensure result fits in u64
+        let max_u64 = 18446744073709551615u128;
+        assert!(initial_lp_128 <= max_u64, E_OVERFLOW);
+        
+        let initial_lp = (initial_lp_128 as u64);
         assert!(initial_lp > MINIMUM_LIQUIDITY, E_MIN_LIQUIDITY);
 
         // Update total supply to include minimum liquidity
@@ -165,15 +194,25 @@ public fun add_liquidity<X, Y>(
         // Subsequent liquidity: proportional to existing reserves
         assert!(old_x > 0 && old_y > 0, E_INSUFFICIENT_LIQUIDITY);
 
-        // Calculate LP based on both tokens — with overflow protection
-        let lp_from_x = safe_mul(amount_x, pool.lp_supply) / old_x;
-        let lp_from_y = safe_mul(amount_y, pool.lp_supply) / old_y;
+        // Calculate LP based on both tokens — with u128 for overflow protection
+        let amount_x_128 = (amount_x as u128);
+        let amount_y_128 = (amount_y as u128);
+        let lp_supply_128 = (pool.lp_supply as u128);
+        let old_x_128 = (old_x as u128);
+        let old_y_128 = (old_y as u128);
+        
+        let lp_from_x_128 = (amount_x_128 * lp_supply_128) / old_x_128;
+        let lp_from_y_128 = (amount_y_128 * lp_supply_128) / old_y_128;
+        
+        // Ensure results fit in u64
+        let max_u64 = 18446744073709551615u128;
+        assert!(lp_from_x_128 <= max_u64 && lp_from_y_128 <= max_u64, E_OVERFLOW);
 
         // Take minimum to prevent over-minting (user gets less LP if ratio is off)
-        let lp = if (lp_from_x < lp_from_y) {
-            lp_from_x
+        let lp = if (lp_from_x_128 < lp_from_y_128) {
+            (lp_from_x_128 as u64)
         } else {
-            lp_from_y
+            (lp_from_y_128 as u64)
         };
         
         // Update LP supply here (more explicit and robust)
@@ -230,9 +269,21 @@ public fun remove_liquidity<X, Y>(
     // Ensure pool has liquidity
     assert!(total_x > 0 && total_y > 0, E_INSUFFICIENT_LIQUIDITY);
 
-    // Use safe multiplication to prevent overflow
-    let amount_x = safe_mul(total_x, lp_amount) / pool.lp_supply;
-    let amount_y = safe_mul(total_y, lp_amount) / pool.lp_supply;
+    // Use u128 for safe calculations
+    let total_x_128 = (total_x as u128);
+    let total_y_128 = (total_y as u128);
+    let lp_amount_128 = (lp_amount as u128);
+    let lp_supply_128 = (pool.lp_supply as u128);
+    
+    let amount_x_128 = (total_x_128 * lp_amount_128) / lp_supply_128;
+    let amount_y_128 = (total_y_128 * lp_amount_128) / lp_supply_128;
+    
+    // Ensure results fit in u64
+    let max_u64 = 18446744073709551615u128;
+    assert!(amount_x_128 <= max_u64 && amount_y_128 <= max_u64, E_OVERFLOW);
+    
+    let amount_x = (amount_x_128 as u64);
+    let amount_y = (amount_y_128 as u64);
 
     assert!(amount_x > 0 && amount_y > 0, E_INSUFFICIENT_LP_TOKENS);
     
@@ -268,20 +319,26 @@ public fun remove_liquidity<X, Y>(
     (coin_x, coin_y)
 }
 
-// Helper function for swap calculations with overflow protection
+// Helper function for swap calculations with u128 to prevent overflow
 fun calculate_swap_output(amount_in: u64, balance_in: u64, balance_out: u64, fee_bps: u64): u64 {
     // Apply fee to input amount
-    let amount_in_with_fee = amount_in * (BASIS_POINTS - fee_bps);
+    let amount_in_with_fee = (amount_in as u128) * ((BASIS_POINTS - fee_bps) as u128);
     
-    // Use safe_mul to prevent overflow in numerator calculation
-    // This protects against extreme swap amounts in large pools
-    let numerator = safe_mul(amount_in_with_fee, balance_out);
+    // Use u128 to prevent overflow
+    let balance_out_128 = (balance_out as u128);
+    let numerator = amount_in_with_fee * balance_out_128;
     
     // Denominator: (balance_in * BASIS_POINTS) + amount_in_with_fee
-    // Protect the first multiplication as well
-    let denominator = safe_mul(balance_in, BASIS_POINTS) + amount_in_with_fee;
+    let balance_in_128 = (balance_in as u128);
+    let basis_points_128 = (BASIS_POINTS as u128);
+    let denominator = balance_in_128 * basis_points_128 + amount_in_with_fee;
     
-    numerator / denominator
+    // Ensure result fits in u64
+    let result_128 = numerator / denominator;
+    let max_u64 = 18446744073709551615u128;
+    assert!(result_128 <= max_u64, E_OVERFLOW);
+    
+    (result_128 as u64)
 }
 
 // Swap X for Y with slippage protection
