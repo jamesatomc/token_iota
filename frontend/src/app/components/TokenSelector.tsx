@@ -139,18 +139,18 @@ export default function TokenSelector({ isOpen, onClose, tokens, onSelect }: Pro
   });
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-      <div className="w-full max-w-xl bg-white dark:bg-zinc-900 rounded-xl shadow-lg overflow-hidden">
-        <div className="p-4 border-b border-zinc-100 dark:border-zinc-800">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4">
+      <div className="w-full max-w-xl bg-white rounded-xl shadow-lg overflow-hidden">
+        <div className="p-4 border-b border-gray-100">
           <div className="flex items-center gap-2">
             <input
               ref={inputRef}
-              className="flex-1 px-4 py-2 rounded-lg border border-zinc-200 dark:border-zinc-800 focus:outline-none bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white"
+              className="flex-1 px-4 py-2 rounded-lg border border-gray-200 focus:outline-none bg-white text-gray-900"
               placeholder="Search tokens..."
               value={query}
               onChange={(e) => setQuery(e.target.value)}
             />
-            <button onClick={onClose} className="px-3 py-2 text-sm text-zinc-600 dark:text-zinc-300">Close</button>
+            <button onClick={onClose} className="px-3 py-2 text-sm text-gray-600">Close</button>
           </div>
         </div>
 
@@ -162,14 +162,14 @@ export default function TokenSelector({ isOpen, onClose, tokens, onSelect }: Pro
                 onSelect(t.type, t.symbol);
                 onClose();
               }}
-              className="w-full text-left px-4 py-3 hover:bg-zinc-50 dark:hover:bg-zinc-800 flex items-center justify-between"
+              className="w-full text-left px-4 py-3 hover:bg-gray-50 flex items-center justify-between"
             >
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-full bg-blue-500 flex items-center justify-center text-white font-bold">{t.symbol?.[0] || "T"}</div>
                 <div className="min-w-0 flex items-center gap-2">
                   <div className="min-w-0">
-                    <div className="font-semibold text-zinc-900 dark:text-white text-sm leading-tight">{t.symbol}</div>
-                    <div className="text-xs text-zinc-500 dark:text-zinc-400 truncate max-w-[420px]" title={t.type}>{t.name || shortType(t.type)}</div>
+                    <div className="font-semibold text-gray-900 text-sm leading-tight">{t.symbol}</div>
+                    <div className="text-xs text-gray-500 truncate max-w-[420px]" title={t.type}>{t.name || shortType(t.type)}</div>
                   </div>
 
                   {/* copy icon (icon-only, toggles to check on success) */}
@@ -184,7 +184,7 @@ export default function TokenSelector({ isOpen, onClose, tokens, onSelect }: Pro
                         // ignore
                       }
                     }}
-                    className="ml-1 p-1 rounded hover:bg-zinc-100 dark:hover:bg-zinc-800 shrink-0"
+                    className="ml-1 p-1 rounded hover:bg-gray-100 shrink-0"
                     title={copiedType === t.type ? "Copied" : "Copy full token type"}
                     aria-label={copiedType === t.type ? "Copied" : "Copy full token type"}
                   >
@@ -195,7 +195,7 @@ export default function TokenSelector({ isOpen, onClose, tokens, onSelect }: Pro
                       </svg>
                     ) : (
                       // clipboard icon
-                      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4 text-zinc-500 dark:text-zinc-300">
+                      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4 text-gray-500">
                         <path d="M9 2a1 1 0 00-1 1v1H6a2 2 0 00-2 2v8a2 2 0 002 2h8a2 2 0 002-2V6a2 2 0 00-2-2h-2V3a1 1 0 00-1-1H9z" />
                         <path d="M9 4h2v1H9V4z" />
                       </svg>
@@ -204,7 +204,7 @@ export default function TokenSelector({ isOpen, onClose, tokens, onSelect }: Pro
                 </div>
               </div>
 
-              <div className="text-right text-sm text-zinc-700 dark:text-zinc-300 min-w-[88px]">
+              <div className="text-right text-sm text-gray-700 min-w-[88px]">
                 <div className="mt-1">
                   {balances[t.type]
                     ? (t.type === "0x2::iota::IOTA"
@@ -217,13 +217,13 @@ export default function TokenSelector({ isOpen, onClose, tokens, onSelect }: Pro
           ))}
 
           {filtered.length === 0 && (
-            <div className="p-6 text-center text-zinc-500">No tokens found</div>
+            <div className="p-6 text-center text-gray-500">No tokens found</div>
           )}
         </div>
-        <div className="p-4 border-t border-zinc-100 dark:border-zinc-800 text-center">
+        <div className="p-4 border-t border-gray-100 text-center">
           <button
             onClick={() => setShowManager(true)}
-            className="text-sm text-blue-600 dark:text-blue-400 underline"
+            className="text-sm text-blue-600 underline"
           >
             Missing a token? Manage custom tokens
           </button>

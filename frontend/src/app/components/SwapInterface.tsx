@@ -410,23 +410,23 @@ export default function SwapInterface() {
   };
 
   return (
-    <div className="bg-white dark:bg-zinc-900 rounded-2xl shadow-lg p-6 max-w-md w-full">
-      <h2 className="text-2xl font-bold mb-6 text-zinc-900 dark:text-white">Swap Tokens</h2>
+    <div className="bg-white rounded-2xl shadow-sm p-6 max-w-md w-full">
+      <h2 className="text-2xl font-bold mb-6 text-gray-900">Swap Tokens</h2>
 
       {/* Pool Selection */}
       <div className="mb-4">
-        <label className="block text-sm font-medium mb-2 text-zinc-700 dark:text-zinc-300">
+        <label className="block text-sm font-medium mb-2 text-gray-700">
           Select Pool
         </label>
         {poolsLoading ? (
-          <div className="w-full px-4 py-3 rounded-lg border border-zinc-300 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400 text-center">
+          <div className="w-full px-4 py-3 rounded-lg border border-gray-300 bg-gray-50 text-gray-500 text-center">
             Loading pools...
           </div>
         ) : pools.length > 0 ? (
           <select
             value={poolId}
             onChange={(e) => setPoolId(e.target.value)}
-            className="w-full px-4 py-3 rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="w-full px-4 py-3 rounded-lg border border-gray-300 bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
           >
             <option value="">Select a pool...</option>
             {pools.map((pool) => (
@@ -439,22 +439,22 @@ export default function SwapInterface() {
             ))}
           </select>
         ) : (
-          <div className="w-full px-4 py-3 rounded-lg border border-zinc-300 dark:border-zinc-700 bg-amber-50 dark:bg-amber-900/20 text-amber-800 dark:text-amber-200 text-sm">
+          <div className="w-full px-4 py-3 rounded-lg border border-gray-300 bg-gray-50 text-gray-700 text-sm">
             ⚠️ No pools found. Please create a pool first.
           </div>
         )}
       </div>
 
       {/* From Token */}
-      <div className="bg-zinc-50 dark:bg-zinc-800 rounded-xl p-4 mb-2 relative">
+      <div className="bg-gray-50 rounded-xl p-4 mb-2 relative">
         <div className="flex justify-between mb-2">
-          <span className="text-sm text-zinc-600 dark:text-zinc-400">From</span>
+          <span className="text-sm text-gray-600">From</span>
         </div>
 
         {/* token badge top-right */}
         <button
           onClick={() => { setSelectingFor("from"); setShowTokenSelector(true); }}
-          className="absolute top-4 right-4 flex items-center gap-3 px-3 py-2 rounded-lg bg-white dark:bg-zinc-800 text-sm font-medium text-zinc-900 dark:text-white"
+          className="absolute top-4 right-4 flex items-center gap-3 px-3 py-2 rounded-lg bg-white text-sm font-medium text-gray-900"
         >
           <div className="w-8 h-8 rounded-full bg-blue-500 flex items-center justify-center text-white font-bold">
             {(tokenFromSymbol && tokenFromSymbol[0]) || "T"}
@@ -462,7 +462,7 @@ export default function SwapInterface() {
           <div className="text-left">
             <div className="font-semibold text-sm leading-tight">{tokenFromSymbol ?? (pools.find(p => p.poolId === poolId)?.tokenXSymbol) ?? (isXtoY ? "Token X" : "Token Y")}</div>
             <div
-              className="text-xs text-zinc-500 dark:text-zinc-400 truncate max-w-60"
+              className="text-xs text-gray-500 truncate max-w-60"
               title={shortType(tokenFromType ?? pools.find(p => p.poolId === poolId)?.tokenX)}
             >
               {shortType(tokenFromType ?? pools.find(p => p.poolId === poolId)?.tokenX)}
@@ -479,17 +479,17 @@ export default function SwapInterface() {
             value={amountIn}
             onChange={(e) => setAmountIn(e.target.value)}
             placeholder="0.0"
-            className="flex-1 text-3xl font-semibold bg-transparent border-none outline-none text-zinc-900 dark:text-white"
+            className="flex-1 text-3xl font-semibold bg-transparent border-none outline-none text-gray-900"
           />
         </div>
 
-        <div className="flex items-center justify-between mt-3 text-sm text-zinc-600 dark:text-zinc-400">
+        <div className="flex items-center justify-between mt-3 text-sm text-gray-600">
           <div>
             Balance: {formatBalance(tokenFromType)} {tokenFromSymbol ?? pools.find(p => p.poolId === poolId)?.tokenXSymbol}
           </div>
           <div className="flex gap-6">
-            <button onClick={handleHalf} className="px-3 py-1 rounded-lg bg-transparent hover:bg-zinc-100 dark:hover:bg-zinc-800">50%</button>
-            <button onClick={handleMax} className="px-3 py-1 rounded-lg bg-transparent hover:bg-zinc-100 dark:hover:bg-zinc-800">Max</button>
+            <button onClick={handleHalf} className="px-3 py-1 rounded-lg bg-transparent hover:bg-gray-100">50%</button>
+            <button onClick={handleMax} className="px-3 py-1 rounded-lg bg-transparent hover:bg-gray-100">Max</button>
           </div>
         </div>
       </div>
@@ -499,24 +499,24 @@ export default function SwapInterface() {
         <button
           onClick={switchDirection}
           aria-label="Switch direction"
-          className="bg-white dark:bg-zinc-800 border-4 border-zinc-50 dark:border-zinc-900 rounded-full p-2 hover:bg-zinc-100 dark:hover:bg-zinc-700 cursor-pointer transition-transform duration-150 ease-in-out hover:scale-105 active:scale-95"
+          className="bg-white border-4 border-gray-50 rounded-full p-2 hover:bg-gray-100 cursor-pointer transition-transform duration-150 ease-in-out hover:scale-105 active:scale-95"
         >
-          <svg className="w-6 h-6 text-zinc-600 dark:text-zinc-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <svg className="w-6 h-6 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" />
           </svg>
         </button>
       </div>
 
       {/* To Token */}
-      <div className="bg-zinc-50 dark:bg-zinc-800 rounded-xl p-4 mb-4 relative">
+      <div className="bg-gray-50 rounded-xl p-4 mb-4 relative">
         <div className="flex justify-between mb-2">
-          <span className="text-sm text-zinc-600 dark:text-zinc-400">To</span>
+          <span className="text-sm text-gray-600">To</span>
         </div>
 
         {/* token badge top-right */}
         <button
           onClick={() => { setSelectingFor("to"); setShowTokenSelector(true); }}
-          className="absolute top-4 right-4 flex items-center gap-3 px-3 py-2 rounded-lg bg-white dark:bg-zinc-800 text-sm font-medium text-zinc-900 dark:text-white"
+          className="absolute top-4 right-4 flex items-center gap-3 px-3 py-2 rounded-lg bg-white text-sm font-medium text-gray-900"
         >
           <div className="w-8 h-8 rounded-full bg-blue-500 flex items-center justify-center text-white font-bold">
             {(tokenToSymbol && tokenToSymbol[0]) || "T"}
@@ -524,7 +524,7 @@ export default function SwapInterface() {
           <div className="text-left">
             <div className="font-semibold text-sm leading-tight">{tokenToSymbol ?? (pools.find(p => p.poolId === poolId)?.tokenYSymbol) ?? (isXtoY ? "Token Y" : "Token X")}</div>
             <div
-              className="text-xs text-zinc-500 dark:text-zinc-400 truncate max-w-60"
+              className="text-xs text-gray-500 truncate max-w-60"
               title={shortType(tokenToType ?? pools.find(p => p.poolId === poolId)?.tokenY)}
             >
               {shortType(tokenToType ?? pools.find(p => p.poolId === poolId)?.tokenY)}
@@ -541,11 +541,11 @@ export default function SwapInterface() {
             value={amountOut}
             onChange={(e) => setAmountOut(e.target.value)}
             placeholder="0.0"
-            className="flex-1 text-3xl font-semibold bg-transparent border-none outline-none text-zinc-900 dark:text-white"
+            className="flex-1 text-3xl font-semibold bg-transparent border-none outline-none text-gray-900"
           />
         </div>
 
-        <div className="mt-3 text-sm text-zinc-600 dark:text-zinc-400 flex items-center justify-between">
+        <div className="mt-3 text-sm text-gray-600 flex items-center justify-between">
           <div>
             Balance: {formatBalance(tokenToType)} {tokenToSymbol ?? pools.find(p => p.poolId === poolId)?.tokenYSymbol}
           </div>
@@ -571,7 +571,7 @@ export default function SwapInterface() {
 
       {/* Slippage */}
       <div className="mb-4">
-        <label className="block text-sm font-medium mb-2 text-zinc-700 dark:text-zinc-300">
+        <label className="block text-sm font-medium mb-2 text-gray-700">
           Slippage Tolerance (%)
         </label>
         <div className="flex gap-2">
@@ -581,7 +581,7 @@ export default function SwapInterface() {
               onClick={() => setSlippage(value)}
               className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${slippage === value
                   ? "bg-blue-500 text-white"
-                  : "bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-200 dark:hover:bg-zinc-700"
+                  : "bg-gray-100 text-gray-700 hover:bg-gray-200"
                 }`}
             >
               {value}%
@@ -591,7 +591,7 @@ export default function SwapInterface() {
             type="number"
             value={slippage}
             onChange={(e) => setSlippage(e.target.value)}
-            className="w-28 text-center px-3 py-2 rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white text-sm"
+            className="w-28 text-center px-3 py-2 rounded-lg border border-gray-300 bg-white text-gray-900 text-sm"
             placeholder="Custom"
           />
         </div>
@@ -601,7 +601,7 @@ export default function SwapInterface() {
       <button
         onClick={handleSwap}
         disabled={loading || !currentAccount || !amountIn || !poolId}
-        className="w-full bg-blue-500 hover:bg-blue-600 disabled:bg-zinc-300 disabled:dark:bg-zinc-700 text-white font-semibold py-4 rounded-xl transition-colors disabled:cursor-not-allowed"
+        className="w-full bg-blue-500 hover:bg-blue-600 disabled:bg-gray-300 text-white font-semibold py-4 rounded-xl transition-colors disabled:cursor-not-allowed"
       >
         {loading ? "Swapping..." : !currentAccount ? "Connect Wallet" : "Swap"}
       </button>

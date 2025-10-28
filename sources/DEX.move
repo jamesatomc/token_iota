@@ -99,6 +99,7 @@ public fun create_pool<X, Y>(fee_bps: u64, ctx: &mut TxContext) {
 }
 
 // Safe multiplication with overflow check using u128
+#[allow(unused_function)]
 fun safe_mul(a: u64, b: u64): u64 {
     if (a == 0 || b == 0) {
         0
@@ -142,6 +143,7 @@ fun sqrt_u128(y: u128): u128 {
 }
 
 // Helper function to calculate square root (for u64 values)
+#[allow(unused_function)]
 fun sqrt(y: u64): u64 {
     (sqrt_u128((y as u128)) as u64)
 }

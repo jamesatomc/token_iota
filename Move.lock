@@ -2,7 +2,7 @@
 
 [move]
 version = 3
-manifest_digest = "B6D47A597AE69FF3F6B7231FBBA9C071186BC19B4BA7D2790800B169D112F297"
+manifest_digest = "D219837380A0F2CB2031A0FE5A53A9BAAF51BF18098A13146D91494C0032AE60"
 deps_digest = "3C4103934B1E040BB6B23F1D610B4EF9F2F1166A50A104EADCF77467C004C600"
 dependencies = [
   { id = "Iota", name = "Iota" },
@@ -30,6 +30,6 @@ flavor = "iota"
 
 [env.testnet]
 chain-id = "2304aa97"
-original-published-id = "0x5fd51453b40aae0b964449aa06949584d6b588a88e40ae115cc5293769808c3d"
-latest-published-id = "0x5fd51453b40aae0b964449aa06949584d6b588a88e40ae115cc5293769808c3d"
+original-published-id = "0xaedb81c889c55fdc1279979838cd80917e5d4579148e4844dbc04215bf01bdfb"
+latest-published-id = "0xaedb81c889c55fdc1279979838cd80917e5d4579148e4844dbc04215bf01bdfb"
 published-version = "1"
