@@ -15,6 +15,7 @@ export default function LiquidityInterface() {
   const [tab, setTab] = useState<"add" | "remove">("add");
   const [amountX, setAmountX] = useState("");
   const [amountY, setAmountY] = useState("");
+  const [isEstimating, setIsEstimating] = useState(false);
   const [selectedPool, setSelectedPool] = useState("");
   const [selectedLPToken, setSelectedLPToken] = useState("");
   const [slippage, setSlippage] = useState("0.5");
@@ -25,6 +26,114 @@ export default function LiquidityInterface() {
   const currentAccount = useCurrentAccount();
   const client = useIotaClient();
   const { pools, loading: poolsLoading } = usePools();
+  const [poolBalances, setPoolBalances] = useState<Record<string, string>>({});
+
+  // fetch balances for selected pool token types
+  useEffect(() => {
+    const fetch = async () => {
+      if (!client || !currentAccount || !selectedPool) {
+        setPoolBalances({});
+        return;
+      }
+      const p = pools.find((x) => x.poolId === selectedPool);
+      if (!p) return;
+      const types = [p.tokenX, p.tokenY];
+      const map: Record<string, string> = {};
+      await Promise.all(types.map(async (t) => {
+        try {
+          if (t === "0x2::iota::IOTA") {
+            try {
+              const bal = await (client as any).getBalance?.({ owner: currentAccount.address });
+              if (bal && typeof bal === 'object' && (typeof bal.total === 'number' || typeof bal.total === 'string')) {
+                map[t] = String(bal.total ?? 0);
+                return;
+              }
+            } catch (e) { }
+          }
+          const resp = await client.getCoins({ owner: currentAccount.address, coinType: t });
+          const total = (resp.data || []).reduce((acc: bigint, c: any) => acc + BigInt(c.balance || 0), BigInt(0));
+          map[t] = total.toString();
+        } catch (e) {
+          map[t] = '0';
+        }
+      }));
+      setPoolBalances(map);
+    };
+    void fetch();
+  }, [client, currentAccount, selectedPool, pools]);
+
+  const formatPoolBalance = (t?: string | null) => {
+    if (!t) return '0';
+    const raw = poolBalances[t];
+    if (!raw) return '0';
+    const human = Number(raw) / 1e9;
+    if (t === '0x2::iota::IOTA') return Math.floor(human).toLocaleString(undefined, { maximumFractionDigits: 0 });
+    return human.toLocaleString(undefined, { maximumFractionDigits: 6 });
+  };
+
+  const getPoolHumanBalance = (t?: string | null) => {
+    if (!t) return 0;
+    const raw = poolBalances[t];
+    if (!raw) return 0;
+    return Number(raw) / 1e9;
+  };
+
+  // helpers to convert between human string and raw BigInt (1e9 base)
+  const rawFromHuman = (humanStr: string) => {
+    try {
+      const v = parseFloat(humanStr || "0");
+      if (!isFinite(v) || v <= 0) return BigInt(0);
+      return BigInt(Math.floor(v * 1e9));
+    } catch (e) {
+      return BigInt(0);
+    }
+  };
+
+  const humanFromRawBig = (raw: bigint, maxFrac = 6) => {
+    try {
+      const human = Number(raw) / 1e9;
+      return human.toLocaleString(undefined, { maximumFractionDigits: maxFrac });
+    } catch (e) {
+      return "0";
+    }
+  };
+
+  // compute counterpart amount to keep pool ratio: out = in * reserveOut / reserveIn
+  const computeCounterpart = (inHumanStr: string, fromIsX: boolean) => {
+    if (!selectedPool) return "";
+    const p = pools.find((x) => x.poolId === selectedPool);
+    if (!p) return "";
+    const reserveX = BigInt(p.reserveX || "0");
+    const reserveY = BigInt(p.reserveY || "0");
+    if (reserveX === BigInt(0) || reserveY === BigInt(0)) return "";
+
+    const rawIn = rawFromHuman(inHumanStr);
+    if (rawIn === BigInt(0)) return "";
+
+    let outRaw = BigInt(0);
+    if (fromIsX) {
+      // outRaw = rawIn * reserveY / reserveX
+      outRaw = (rawIn * reserveY) / reserveX;
+    } else {
+      // outRaw = rawIn * reserveX / reserveY
+      outRaw = (rawIn * reserveX) / reserveY;
+    }
+
+    return humanFromRawBig(outRaw, 6);
+  };
+
+  // handlers that compute counterpart immediately
+  const handleAmountXChange = (val: string) => {
+    setAmountX(val);
+    const other = computeCounterpart(val, true);
+    setAmountY(other);
+  };
+
+  const handleAmountYChange = (val: string) => {
+    setAmountY(val);
+    const other = computeCounterpart(val, false);
+    setAmountX(other);
+  };
 
   // Fetch user's LP tokens for selected pool
   useEffect(() => {
@@ -308,6 +417,17 @@ export default function LiquidityInterface() {
     }
   };
 
+  // show a small estimating/loading state while user types amounts
+  useEffect(() => {
+    if (!amountX && !amountY) {
+      setIsEstimating(false);
+      return;
+    }
+    setIsEstimating(true);
+    const t = setTimeout(() => setIsEstimating(false), 400);
+    return () => clearTimeout(t);
+  }, [amountX, amountY]);
+
   return (
     <div className="bg-white dark:bg-zinc-900 rounded-2xl shadow-lg p-6 max-w-md w-full">
       <div className="flex mb-6 bg-zinc-100 dark:bg-zinc-800 rounded-lg p-1">
@@ -336,8 +456,8 @@ export default function LiquidityInterface() {
       {/* Pool Selection */}
       <div className="space-y-4 mb-4">
         <div>
-          <label className="block text-sm font-medium mb-2 text-zinc-700 dark:text-zinc-300">
-            Select Pool
+          <label className="block text-sm font-medium mb-3 text-zinc-700 dark:text-zinc-300">
+            Select Liquidity Pool
           </label>
           {poolsLoading ? (
             <div className="w-full px-4 py-3 rounded-lg border border-zinc-300 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400 text-center">
@@ -354,12 +474,40 @@ export default function LiquidityInterface() {
                 {pools.map((pool) => (
                   <option key={pool.poolId} value={pool.poolId}>
                     {pool.tokenXSymbol}/{pool.tokenYSymbol} - {pool.poolId.slice(0, 8)}...{pool.poolId.slice(-6)} - Fee: {(parseInt(pool.feeBps) / 100).toFixed(2)}%
-                    {pool.reserveX && pool.reserveY && (
-                      ` - ${(parseInt(pool.reserveX) / 1e9).toFixed(2)} ${pool.tokenXSymbol} / ${(parseInt(pool.reserveY) / 1e9).toFixed(2)} ${pool.tokenYSymbol}`
-                    )}
                   </option>
                 ))}
               </select>
+
+              {/* show chosen pool card */}
+              {selectedPool && (() => {
+                const p = pools.find((x) => x.poolId === selectedPool);
+                if (!p) return null;
+                return (
+                  <div className="mt-4 bg-white dark:bg-zinc-900 rounded-lg p-4 border border-zinc-100 dark:border-zinc-800">
+                    <div className="flex items-center gap-3">
+                      <div className="flex -space-x-2">
+                        <div className="w-8 h-8 rounded-full bg-amber-400 flex items-center justify-center text-white font-bold">{p.tokenXSymbol?.[0] ?? 'X'}</div>
+                        <div className="w-8 h-8 rounded-full bg-amber-500 flex items-center justify-center text-white font-bold">{p.tokenYSymbol?.[0] ?? 'Y'}</div>
+                      </div>
+                      <div className="ml-3">
+                        <div className="font-semibold">{p.tokenXSymbol}/{p.tokenYSymbol}</div>
+                        <div className="text-xs text-zinc-500 dark:text-zinc-400">{p.tokenXSymbol} paired with native {p.tokenYSymbol} (Dev fee: {(parseInt(p.feeBps)/100).toFixed(1)}%)</div>
+                      </div>
+                    </div>
+
+                    <div className="mt-4 bg-zinc-50 dark:bg-zinc-800 rounded-md p-3">
+                      <div className="font-medium mb-2">Pool Information</div>
+                      <div className="text-sm text-zinc-600 dark:text-zinc-400 grid grid-cols-2 gap-2">
+                        <div> {p.tokenXSymbol} Reserve</div>
+                        <div className="text-right">{p.reserveX ? (Number(p.reserveX)/1e9).toString() : '0'} {p.tokenXSymbol}</div>
+                        <div>{p.tokenYSymbol} Reserve</div>
+                        <div className="text-right">{p.reserveY ? (Number(p.reserveY)/1e9).toString() : '0'} {p.tokenYSymbol}</div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
+
               <p className="mt-2 text-xs text-zinc-500 dark:text-zinc-400">
                 ✅ {pools.length} pool{pools.length > 1 ? 's' : ''} available
               </p>
@@ -376,34 +524,76 @@ export default function LiquidityInterface() {
         <>
           {/* Token X Amount */}
           <div className="bg-zinc-50 dark:bg-zinc-800 rounded-xl p-4 mb-4">
-            <div className="flex justify-between mb-2">
-              <span className="text-sm text-zinc-600 dark:text-zinc-400">
-                {selectedPool && pools.find(p => p.poolId === selectedPool)?.tokenXSymbol || "Token X"}
-              </span>
+            <div className="flex items-center justify-between">
+              <div className="text-sm font-medium">{selectedPool && pools.find(p => p.poolId === selectedPool)?.tokenXSymbol || "Token X"} Amount</div>
+              <div className="text-sm text-zinc-600 dark:text-zinc-400 flex items-center gap-3">
+                <div>Balance: {selectedPool ? (formatPoolBalance(pools.find(p => p.poolId === selectedPool)?.tokenX) ) : '0' } {pools.find(p => p.poolId === selectedPool)?.tokenXSymbol}</div>
+                <button onClick={async () => { const v = getPoolHumanBalance(pools.find(p => p.poolId === selectedPool)?.tokenX); handleAmountXChange(String(v)); }} className="text-xs px-2 py-1 rounded bg-transparent hover:bg-zinc-100 dark:hover:bg-zinc-800">Max</button>
+                <button onClick={async () => { const v = getPoolHumanBalance(pools.find(p => p.poolId === selectedPool)?.tokenX); handleAmountXChange(String(v/2)); }} className="text-xs px-2 py-1 rounded bg-transparent hover:bg-zinc-100 dark:hover:bg-zinc-800">50%</button>
+              </div>
             </div>
-            <input
-              type="number"
-              value={amountX}
-              onChange={(e) => setAmountX(e.target.value)}
-              placeholder="0.0"
-              className="w-full text-2xl font-semibold bg-transparent border-none outline-none text-zinc-900 dark:text-white"
-            />
+
+            {/* token row */}
+            <div className="mt-3">
+              <button onClick={() => { /* could open token selector for liquidity */ }} className="w-full flex items-center gap-3 px-4 py-3 rounded-lg bg-white dark:bg-zinc-900 text-left">
+                <div className="w-10 h-10 rounded-full bg-amber-400 flex items-center justify-center text-white font-bold">{pools.find(p => p.poolId === selectedPool)?.tokenXSymbol?.[0] ?? 'T'}</div>
+                <div>
+                  <div className="font-semibold">{pools.find(p => p.poolId === selectedPool)?.tokenXSymbol ?? 'Token X'}</div>
+                  <div className="text-xs text-zinc-500 dark:text-zinc-400">{pools.find(p => p.poolId === selectedPool)?.tokenXSymbol}</div>
+                </div>
+                <div className="ml-auto text-zinc-400">⇩</div>
+              </button>
+            </div>
+
+            <div className="mt-4 bg-white dark:bg-zinc-900 rounded-lg p-4">
+              <input
+                type="number"
+                inputMode="decimal"
+                step="any"
+                min="0"
+                value={amountX}
+                onChange={(e) => handleAmountXChange(e.target.value)}
+                placeholder="0.0"
+                className="w-full text-3xl font-semibold text-right bg-transparent border-none outline-none text-zinc-900 dark:text-white"
+              />
+            </div>
           </div>
 
           {/* Token Y Amount */}
           <div className="bg-zinc-50 dark:bg-zinc-800 rounded-xl p-4 mb-4">
-            <div className="flex justify-between mb-2">
-              <span className="text-sm text-zinc-600 dark:text-zinc-400">
-                {selectedPool && pools.find(p => p.poolId === selectedPool)?.tokenYSymbol || "Token Y"}
-              </span>
+            <div className="flex items-center justify-between">
+              <div className="text-sm font-medium">{selectedPool && pools.find(p => p.poolId === selectedPool)?.tokenYSymbol || "Token Y"} Amount</div>
+              <div className="text-sm text-zinc-600 dark:text-zinc-400 flex items-center gap-3">
+                <div>Balance: {selectedPool ? (formatPoolBalance(pools.find(p => p.poolId === selectedPool)?.tokenY) ) : '0' } {pools.find(p => p.poolId === selectedPool)?.tokenYSymbol}</div>
+                <button onClick={async () => { const v = getPoolHumanBalance(pools.find(p => p.poolId === selectedPool)?.tokenY); handleAmountYChange(String(v)); }} className="text-xs px-2 py-1 rounded bg-transparent hover:bg-zinc-100 dark:hover:bg-zinc-800">Max</button>
+                <button onClick={async () => { const v = getPoolHumanBalance(pools.find(p => p.poolId === selectedPool)?.tokenY); handleAmountYChange(String(v/2)); }} className="text-xs px-2 py-1 rounded bg-transparent hover:bg-zinc-100 dark:hover:bg-zinc-800">50%</button>
+              </div>
             </div>
-            <input
-              type="number"
-              value={amountY}
-              onChange={(e) => setAmountY(e.target.value)}
-              placeholder="0.0"
-              className="w-full text-2xl font-semibold bg-transparent border-none outline-none text-zinc-900 dark:text-white"
-            />
+
+            {/* token row */}
+            <div className="mt-3">
+              <button onClick={() => { /* token selector */ }} className="w-full flex items-center gap-3 px-4 py-3 rounded-lg bg-white dark:bg-zinc-900 text-left">
+                <div className="w-10 h-10 rounded-full bg-amber-400 flex items-center justify-center text-white font-bold">{pools.find(p => p.poolId === selectedPool)?.tokenYSymbol?.[0] ?? 'T'}</div>
+                <div>
+                  <div className="font-semibold">{pools.find(p => p.poolId === selectedPool)?.tokenYSymbol ?? 'Token Y'}</div>
+                  <div className="text-xs text-zinc-500 dark:text-zinc-400">{pools.find(p => p.poolId === selectedPool)?.tokenYSymbol}</div>
+                </div>
+                <div className="ml-auto text-zinc-400">⇩</div>
+              </button>
+            </div>
+
+            <div className="mt-4 bg-white dark:bg-zinc-900 rounded-lg p-4">
+              <input
+                type="number"
+                inputMode="decimal"
+                step="any"
+                min="0"
+                value={amountY}
+                onChange={(e) => handleAmountYChange(e.target.value)}
+                placeholder="0.0"
+                className="w-full text-3xl font-semibold text-right bg-transparent border-none outline-none text-zinc-900 dark:text-white"
+              />
+            </div>
           </div>
 
           {/* Slippage */}
@@ -419,22 +609,34 @@ export default function LiquidityInterface() {
                   className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
                     slippage === value
                       ? "bg-blue-500 text-white"
-                      : "bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300"
+                      : "bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-200 dark:hover:bg-zinc-700"
                   }`}
                 >
                   {value}%
                 </button>
               ))}
+              <input
+                type="number"
+                value={slippage}
+                onChange={(e) => setSlippage(e.target.value)}
+                className="w-28 text-center px-3 py-2 rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white text-sm"
+                placeholder="Custom"
+              />
             </div>
           </div>
 
           <button
             onClick={handleAddLiquidity}
             disabled={loading || !currentAccount}
-            className="w-full bg-blue-500 hover:bg-blue-600 disabled:bg-zinc-300 disabled:dark:bg-zinc-700 text-white font-semibold py-4 rounded-xl transition-colors"
+            className="w-full bg-blue-500 hover:bg-blue-600 disabled:opacity-60 disabled:cursor-not-allowed text-white font-semibold py-4 rounded-xl transition-colors"
           >
-            {loading ? "Adding..." : !currentAccount ? "Connect Wallet" : "Add Liquidity"}
+            {loading ? (
+              <span className="flex items-center justify-center gap-2"><svg className="w-4 h-4 animate-spin" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"/></svg>Adding...</span>
+            ) : !currentAccount ? "Connect Wallet" : "Add Liquidity"}
           </button>
+        
+        {/* estimation spinner state: small debounce while user types */}
+        
         </>
       ) : (
         <>

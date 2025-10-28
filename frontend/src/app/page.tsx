@@ -102,11 +102,11 @@ export default function Home() {
           </div>
           
           {/* Sidebar with wallet info */}
-          {currentAccount && (
+          {/* {currentAccount && (
             <div className="hidden lg:block w-80 shrink-0">
               <WalletBalance />
             </div>
-          )}
+          )} */}
         </div>
 
         {/* Info Cards */}
