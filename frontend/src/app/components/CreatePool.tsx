@@ -31,7 +31,7 @@ export default function CreatePool() {
       const feeBps = feeValues[feeType].bps;
 
       tx.moveCall({
-        target: `${CONTRACTS.PACKAGE_ID}::${MODULES.DEX_FACTORY}::${DEX_FUNCTIONS.CREATE_POOL}`,
+        target: `${CONTRACTS.PACKAGE_ID}::${MODULES.DEX}::${DEX_FUNCTIONS.CREATE_POOL}`,
         arguments: [
           tx.pure.u64(feeBps),
         ],

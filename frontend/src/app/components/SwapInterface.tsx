@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { useSignAndExecuteTransaction, useCurrentAccount } from "@iota/dapp-kit";
+import { useSignAndExecuteTransaction, useCurrentAccount, useIotaClient } from "@iota/dapp-kit";
 import { Transaction } from "@iota/iota-sdk/transactions";
 import { CONTRACTS, MODULES, DEX_FUNCTIONS, parseAmount } from "../lib/contracts";
 
@@ -15,6 +15,7 @@ export default function SwapInterface() {
   
   const { mutate: signAndExecute } = useSignAndExecuteTransaction();
   const currentAccount = useCurrentAccount();
+  const client = useIotaClient();
 
   const handleSwap = async () => {
     if (!currentAccount || !amountIn || !poolId) {
@@ -34,23 +35,49 @@ export default function SwapInterface() {
       const amountInParsed = parseAmount(amountIn);
 
       if (isXtoY) {
-        // Swap KANARI to IOTA
+        // Swap KANARI to IOTA - need to get KANARI coins
+        const kanariCoins = await client.getCoins({
+          owner: currentAccount.address,
+          coinType: CONTRACTS.KANARI.TYPE,
+        });
+
+        if (kanariCoins.data.length === 0) {
+          alert("You don't have any KANARI tokens.");
+          setLoading(false);
+          return;
+        }
+
+        // Merge all KANARI coins if multiple
+        const [primaryKanariCoin, ...restKanariCoins] = kanariCoins.data;
+        
+        if (restKanariCoins.length > 0) {
+          tx.mergeCoins(
+            tx.object(primaryKanariCoin.coinObjectId),
+            restKanariCoins.map((coin) => tx.object(coin.coinObjectId))
+          );
+        }
+
+        // Split the exact amount needed
+        const [coinIn] = tx.splitCoins(tx.object(primaryKanariCoin.coinObjectId), [amountInParsed]);
+
         tx.moveCall({
-          target: `${CONTRACTS.PACKAGE_ID}::${MODULES.DEX_FACTORY}::${DEX_FUNCTIONS.SWAP_X_TO_Y}`,
+          target: `${CONTRACTS.PACKAGE_ID}::${MODULES.DEX}::${DEX_FUNCTIONS.SWAP_X_TO_Y}`,
           arguments: [
             tx.object(poolId),
-            tx.object(amountInParsed), // coin_in
+            coinIn,
             tx.pure.u64(minAmountOut),
           ],
           typeArguments: [CONTRACTS.KANARI.TYPE, CONTRACTS.IOTA.TYPE],
         });
       } else {
-        // Swap IOTA to KANARI
+        // Swap IOTA to KANARI - split from gas coin
+        const [coinIn] = tx.splitCoins(tx.gas, [amountInParsed]);
+
         tx.moveCall({
-          target: `${CONTRACTS.PACKAGE_ID}::${MODULES.DEX_FACTORY}::${DEX_FUNCTIONS.SWAP_Y_TO_X}`,
+          target: `${CONTRACTS.PACKAGE_ID}::${MODULES.DEX}::${DEX_FUNCTIONS.SWAP_Y_TO_X}`,
           arguments: [
             tx.object(poolId),
-            tx.object(amountInParsed), // coin_in
+            coinIn,
             tx.pure.u64(minAmountOut),
           ],
           typeArguments: [CONTRACTS.KANARI.TYPE, CONTRACTS.IOTA.TYPE],

@@ -148,28 +148,6 @@ export default function Home() {
           </div>
         </div>
 
-        {/* Contract Info */}
-        {currentAccount && (
-          <div className="mt-12 max-w-5xl mx-auto">
-            <div className="bg-white dark:bg-zinc-900 rounded-xl p-6 shadow-lg border border-zinc-200 dark:border-zinc-800">
-              <h3 className="font-semibold text-zinc-900 dark:text-white mb-4">Contract Information</h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-                <div>
-                  <span className="text-zinc-600 dark:text-zinc-400">Package ID:</span>
-                  <p className="font-mono text-xs text-zinc-900 dark:text-white mt-1 break-all">
-                    0x1bdc310c564c57c090db0c526174fd2081656c830c875906491f1cabe889d5a9
-                  </p>
-                </div>
-                <div>
-                  <span className="text-zinc-600 dark:text-zinc-400">Network:</span>
-                  <p className="font-mono text-xs text-zinc-900 dark:text-white mt-1">
-                    IOTA Testnet
-                  </p>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
       </main>
 
       {/* Footer */}

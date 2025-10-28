@@ -219,21 +219,32 @@ public fun remove_liquidity<X, Y>(
 
     // Defensive: ensure pool has LP supply (prevents division by zero)
     assert!(pool.lp_supply > 0, E_INVALID_POOL_STATE);
+    
+    // Ensure LP amount doesn't exceed total supply
+    assert!(lp_amount <= pool.lp_supply, E_INSUFFICIENT_LP_TOKENS);
 
     // Calculate token amounts based on LP share
     let total_x = balance::value(&pool.balance_x);
     let total_y = balance::value(&pool.balance_y);
+    
+    // Ensure pool has liquidity
+    assert!(total_x > 0 && total_y > 0, E_INSUFFICIENT_LIQUIDITY);
 
-    let amount_x = (total_x * lp_amount) / pool.lp_supply;
-    let amount_y = (total_y * lp_amount) / pool.lp_supply;
+    // Use safe multiplication to prevent overflow
+    let amount_x = safe_mul(total_x, lp_amount) / pool.lp_supply;
+    let amount_y = safe_mul(total_y, lp_amount) / pool.lp_supply;
 
     assert!(amount_x > 0 && amount_y > 0, E_INSUFFICIENT_LP_TOKENS);
+    
+    // Ensure we don't try to withdraw more than available
+    assert!(amount_x <= total_x, E_INSUFFICIENT_LIQUIDITY);
+    assert!(amount_y <= total_y, E_INSUFFICIENT_LIQUIDITY);
 
     // Check slippage protection
     assert!(amount_x >= min_amount_x, E_SLIPPAGE_EXCEEDED);
     assert!(amount_y >= min_amount_y, E_SLIPPAGE_EXCEEDED);
 
-    // Update pool state
+    // Update pool state BEFORE withdrawing
     pool.lp_supply = pool.lp_supply - lp_amount;
 
     // Withdraw tokens
@@ -358,6 +369,11 @@ public fun get_lp_supply<X, Y>(pool: &LiquidityPool<X, Y>): u64 {
 /// Get pool fee
 public fun get_fee<X, Y>(pool: &LiquidityPool<X, Y>): u64 {
     pool.fee_bps
+}
+
+/// Get LP token amount from LP token object
+public fun get_lp_token_amount<X, Y>(lp_token: &LPToken<X, Y>): u64 {
+    lp_token.amount
 }
 
 /// Calculate swap output (view function)

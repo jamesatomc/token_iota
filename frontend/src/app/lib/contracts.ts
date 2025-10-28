@@ -1,13 +1,13 @@
 // Contract addresses and configuration
 export const CONTRACTS = {
   // Replace with your deployed package ID
-  PACKAGE_ID: "0x965b10655efe7b8098a28f74a0e9297b71ec5fe3cac5ad5bb59dab8b0581ce36",
+  PACKAGE_ID: "0xe5699c0b8ba890ee2e4300e3ac9ca0bfe232c1faad0d3bf6d0043f980cafdcc6",
   
   // KANARI Token
   KANARI: {
-    TREASURY_CAP: "0xd1ba1db0c44e3aa78fa8bdc21c4b5308d255f030a8bf66f3f4499673ea5ed24f",
-    METADATA: "0x85338db75074f5037708bdec128af3c4986ecf8845c7681d34c3a696163adadc",
-    TYPE: "0x965b10655efe7b8098a28f74a0e9297b71ec5fe3cac5ad5bb59dab8b0581ce36::kanari::KANARI",
+    TREASURY_CAP: "0x49cc9e9f52c1184620785abe5eba1682c8bb17d8023a849fe39336cafe9b55c7",
+    METADATA: "0x155d24533afc38ba42254ee9bc5cfc85fbebdd12a9376a5c789580e292aa4277",
+    TYPE: "0xe5699c0b8ba890ee2e4300e3ac9ca0bfe232c1faad0d3bf6d0043f980cafdcc6::kanari::KANARI",
   },
   
   // IOTA Token
@@ -25,7 +25,6 @@ export const CONTRACTS = {
 // Module names
 export const MODULES = {
   DEX: "DEX",
-  DEX_FACTORY: "DEXFactory",
   KANARI: "kanari",
 };
 

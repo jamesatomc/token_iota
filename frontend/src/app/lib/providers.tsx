@@ -12,7 +12,7 @@ const { networkConfig } = createNetworkConfig({
   testnet: {
     url: getFullnodeUrl('testnet'),
     variables: {
-      packageId: "0x2e1d8b7ffe3eec8a865dc9f74b58be85e90fb3e629a4ebe781e56ede002fb695",
+      packageId: "0xe5699c0b8ba890ee2e4300e3ac9ca0bfe232c1faad0d3bf6d0043f980cafdcc6",
     },
   },
 });
