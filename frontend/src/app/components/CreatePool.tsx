@@ -7,6 +7,12 @@ import { CONTRACTS, MODULES, DEX_FUNCTIONS } from "../lib/contracts";
 
 export default function CreatePool() {
   const [feeType, setFeeType] = useState<"low" | "med" | "high">("med");
+  const [tokenXType, setTokenXType] = useState(CONTRACTS.KANARI.TYPE);
+  const [tokenYType, setTokenYType] = useState(CONTRACTS.IOTA.TYPE);
+  const [customTokenX, setCustomTokenX] = useState("");
+  const [customTokenY, setCustomTokenY] = useState("");
+  const [useCustomX, setUseCustomX] = useState(false);
+  const [useCustomY, setUseCustomY] = useState(false);
   const [loading, setLoading] = useState(false);
   
   const { mutate: signAndExecute } = useSignAndExecuteTransaction();
@@ -24,6 +30,32 @@ export default function CreatePool() {
       return;
     }
 
+    // Get final token types (custom or preset)
+    const finalTokenX = useCustomX ? customTokenX.trim() : tokenXType;
+    const finalTokenY = useCustomY ? customTokenY.trim() : tokenYType;
+
+    // Validate token types
+    if (!finalTokenX || !finalTokenY) {
+      alert("Please provide both token types");
+      return;
+    }
+
+    if (finalTokenX === finalTokenY) {
+      alert("Token X and Token Y must be different");
+      return;
+    }
+
+    // Basic validation for custom token format
+    if (useCustomX && !finalTokenX.includes("::")) {
+      alert("Invalid Token X format. Should be like: 0xPACKAGE::module::TOKEN");
+      return;
+    }
+
+    if (useCustomY && !finalTokenY.includes("::")) {
+      alert("Invalid Token Y format. Should be like: 0xPACKAGE::module::TOKEN");
+      return;
+    }
+
     setLoading(true);
     try {
       const tx = new Transaction();
@@ -35,7 +67,7 @@ export default function CreatePool() {
         arguments: [
           tx.pure.u64(feeBps),
         ],
-        typeArguments: [CONTRACTS.KANARI.TYPE, CONTRACTS.IOTA.TYPE],
+        typeArguments: [finalTokenX, finalTokenY],
       });
 
       signAndExecute(
@@ -67,7 +99,7 @@ export default function CreatePool() {
       
       <div className="mb-6">
         <p className="text-sm text-zinc-600 dark:text-zinc-400 mb-4">
-          Create a new liquidity pool for KANARI/IOTA pair
+          Create a new liquidity pool for any token pair
         </p>
         
         <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4 mb-4">
@@ -76,12 +108,112 @@ export default function CreatePool() {
               <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
             </svg>
             <div>
-              <p className="text-sm font-medium text-blue-900 dark:text-blue-100">Important</p>
+              <p className="text-sm font-medium text-blue-900 dark:text-blue-100">Note</p>
               <p className="text-sm text-blue-800 dark:text-blue-200 mt-1">
-                After creating the pool, save the Pool ID and Registry ID from the transaction result. You'll need them to add liquidity.
+                The pool will automatically appear in the Swap and Liquidity interfaces after creation.
               </p>
             </div>
           </div>
+        </div>
+      </div>
+
+      {/* Token X Selection */}
+      <div className="mb-4">
+        <label className="block text-sm font-medium mb-2 text-zinc-700 dark:text-zinc-300">
+          Token X
+        </label>
+        <div className="space-y-2">
+          <div className="flex gap-2">
+            <button
+              onClick={() => { setUseCustomX(false); setTokenXType(CONTRACTS.KANARI.TYPE); }}
+              className={`flex-1 px-4 py-2 rounded-lg border transition-colors ${
+                !useCustomX && tokenXType === CONTRACTS.KANARI.TYPE
+                  ? "border-blue-500 bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300"
+                  : "border-zinc-300 dark:border-zinc-700 hover:border-zinc-400 dark:hover:border-zinc-600"
+              }`}
+            >
+              KANARI
+            </button>
+            <button
+              onClick={() => { setUseCustomX(false); setTokenXType(CONTRACTS.IOTA.TYPE); }}
+              className={`flex-1 px-4 py-2 rounded-lg border transition-colors ${
+                !useCustomX && tokenXType === CONTRACTS.IOTA.TYPE
+                  ? "border-blue-500 bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300"
+                  : "border-zinc-300 dark:border-zinc-700 hover:border-zinc-400 dark:hover:border-zinc-600"
+              }`}
+            >
+              IOTA
+            </button>
+            <button
+              onClick={() => setUseCustomX(true)}
+              className={`flex-1 px-4 py-2 rounded-lg border transition-colors ${
+                useCustomX
+                  ? "border-blue-500 bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300"
+                  : "border-zinc-300 dark:border-zinc-700 hover:border-zinc-400 dark:hover:border-zinc-600"
+              }`}
+            >
+              Custom
+            </button>
+          </div>
+          {useCustomX && (
+            <input
+              type="text"
+              value={customTokenX}
+              onChange={(e) => setCustomTokenX(e.target.value)}
+              placeholder="0xPACKAGE::module::TOKEN"
+              className="w-full px-3 py-2 rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white text-sm font-mono focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          )}
+        </div>
+      </div>
+
+      {/* Token Y Selection */}
+      <div className="mb-6">
+        <label className="block text-sm font-medium mb-2 text-zinc-700 dark:text-zinc-300">
+          Token Y
+        </label>
+        <div className="space-y-2">
+          <div className="flex gap-2">
+            <button
+              onClick={() => { setUseCustomY(false); setTokenYType(CONTRACTS.KANARI.TYPE); }}
+              className={`flex-1 px-4 py-2 rounded-lg border transition-colors ${
+                !useCustomY && tokenYType === CONTRACTS.KANARI.TYPE
+                  ? "border-blue-500 bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300"
+                  : "border-zinc-300 dark:border-zinc-700 hover:border-zinc-400 dark:hover:border-zinc-600"
+              }`}
+            >
+              KANARI
+            </button>
+            <button
+              onClick={() => { setUseCustomY(false); setTokenYType(CONTRACTS.IOTA.TYPE); }}
+              className={`flex-1 px-4 py-2 rounded-lg border transition-colors ${
+                !useCustomY && tokenYType === CONTRACTS.IOTA.TYPE
+                  ? "border-blue-500 bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300"
+                  : "border-zinc-300 dark:border-zinc-700 hover:border-zinc-400 dark:hover:border-zinc-600"
+              }`}
+            >
+              IOTA
+            </button>
+            <button
+              onClick={() => setUseCustomY(true)}
+              className={`flex-1 px-4 py-2 rounded-lg border transition-colors ${
+                useCustomY
+                  ? "border-blue-500 bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300"
+                  : "border-zinc-300 dark:border-zinc-700 hover:border-zinc-400 dark:hover:border-zinc-600"
+              }`}
+            >
+              Custom
+            </button>
+          </div>
+          {useCustomY && (
+            <input
+              type="text"
+              value={customTokenY}
+              onChange={(e) => setCustomTokenY(e.target.value)}
+              placeholder="0xPACKAGE::module::TOKEN"
+              className="w-full px-3 py-2 rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white text-sm font-mono focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          )}
         </div>
       </div>
 
@@ -133,11 +265,21 @@ export default function CreatePool() {
         <div className="space-y-2 text-sm">
           <div className="flex justify-between">
             <span className="text-zinc-600 dark:text-zinc-400">Token X:</span>
-            <span className="font-medium text-zinc-900 dark:text-white">KANARI</span>
+            <span className="font-medium text-zinc-900 dark:text-white truncate ml-2 max-w-[200px]" title={useCustomX ? customTokenX : (tokenXType === CONTRACTS.KANARI.TYPE ? "KANARI" : "IOTA")}>
+              {useCustomX 
+                ? (customTokenX ? customTokenX.split("::").pop() || "Custom" : "Not set")
+                : (tokenXType === CONTRACTS.KANARI.TYPE ? "KANARI" : "IOTA")
+              }
+            </span>
           </div>
           <div className="flex justify-between">
             <span className="text-zinc-600 dark:text-zinc-400">Token Y:</span>
-            <span className="font-medium text-zinc-900 dark:text-white">IOTA</span>
+            <span className="font-medium text-zinc-900 dark:text-white truncate ml-2 max-w-[200px]" title={useCustomY ? customTokenY : (tokenYType === CONTRACTS.KANARI.TYPE ? "KANARI" : "IOTA")}>
+              {useCustomY 
+                ? (customTokenY ? customTokenY.split("::").pop() || "Custom" : "Not set")
+                : (tokenYType === CONTRACTS.KANARI.TYPE ? "KANARI" : "IOTA")
+              }
+            </span>
           </div>
           <div className="flex justify-between">
             <span className="text-zinc-600 dark:text-zinc-400">Fee:</span>

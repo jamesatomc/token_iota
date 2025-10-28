@@ -4,13 +4,7 @@ import { useState, useEffect } from "react";
 import { useSignAndExecuteTransaction, useCurrentAccount, useIotaClient } from "@iota/dapp-kit";
 import { Transaction } from "@iota/iota-sdk/transactions";
 import { CONTRACTS, MODULES, DEX_FUNCTIONS, parseAmount } from "../lib/contracts";
-
-interface PoolInfo {
-  objectId: string;
-  reserveX: string;
-  reserveY: string;
-  fee: string;
-}
+import { usePools } from "../hooks/usePools";
 
 interface LPTokenInfo {
   objectId: string;
@@ -25,47 +19,27 @@ export default function LiquidityInterface() {
   const [selectedLPToken, setSelectedLPToken] = useState("");
   const [slippage, setSlippage] = useState("0.5");
   const [loading, setLoading] = useState(false);
-  const [pools, setPools] = useState<PoolInfo[]>([]);
   const [lpTokens, setLPTokens] = useState<LPTokenInfo[]>([]);
-  const [loadingPools, setLoadingPools] = useState(false);
   
   const { mutate: signAndExecute } = useSignAndExecuteTransaction();
   const currentAccount = useCurrentAccount();
   const client = useIotaClient();
+  const { pools, loading: poolsLoading } = usePools();
 
-  // Fetch available pools
-  useEffect(() => {
-    const fetchPools = async () => {
-      if (!client) return;
-      
-      setLoadingPools(true);
-      try {
-        // Since pools are shared objects, we need to use a different approach
-        // Query by using getObject on known pool addresses or use indexer
-        // For now, we'll keep this simple - user can still manually get pool IDs from explorer
-        // In production, you'd want to maintain a registry or use an indexer
-        
-        // Temporary: Check if there are any pools in recent transactions
-        // Better approach: Store pool IDs in a registry contract or off-chain DB
-        setPools([]);
-        
-      } catch (error) {
-        console.error("Error fetching pools:", error);
-      } finally {
-        setLoadingPools(false);
-      }
-    };
-
-    fetchPools();
-  }, [client]);
-
-  // Fetch user's LP tokens
+  // Fetch user's LP tokens for selected pool
   useEffect(() => {
     const fetchLPTokens = async () => {
-      if (!currentAccount || !client) return;
+      if (!currentAccount || !client || !selectedPool) return;
 
       try {
-        const lpTokenType = `${CONTRACTS.PACKAGE_ID}::${MODULES.DEX}::LPToken<${CONTRACTS.KANARI.TYPE}, ${CONTRACTS.IOTA.TYPE}>`;
+        // Find the selected pool's token types
+        const pool = pools.find(p => p.poolId === selectedPool);
+        if (!pool || !pool.tokenX || !pool.tokenY) {
+          setLPTokens([]);
+          return;
+        }
+
+        const lpTokenType = `${CONTRACTS.PACKAGE_ID}::${MODULES.DEX}::LPToken<${pool.tokenX}, ${pool.tokenY}>`;
         
         const response = await client.getOwnedObjects({
           owner: currentAccount.address,
@@ -95,7 +69,7 @@ export default function LiquidityInterface() {
     };
 
     fetchLPTokens();
-  }, [currentAccount, client, tab]); // Re-fetch when switching tabs
+  }, [currentAccount, client, selectedPool, pools, tab]); // Re-fetch when pool changes
 
   const handleAddLiquidity = async () => {
     if (!currentAccount || !amountX || !amountY || !selectedPool) {
@@ -103,38 +77,32 @@ export default function LiquidityInterface() {
       return;
     }
 
+    // Find selected pool to get token types
+    const pool = pools.find(p => p.poolId === selectedPool);
+    if (!pool || !pool.tokenX || !pool.tokenY) {
+      alert("Invalid pool selected");
+      return;
+    }
+
     // Validate amounts
-    const kanariAmount = parseFloat(amountX);
-    const iotaAmount = parseFloat(amountY);
+    const amountXNum = parseFloat(amountX);
+    const amountYNum = parseFloat(amountY);
     
-    if (kanariAmount <= 0 || iotaAmount <= 0) {
+    if (amountXNum <= 0 || amountYNum <= 0) {
       alert("Please enter valid amounts greater than 0");
       return;
     }
 
     // Check for potential overflow in Move contract
-    // u64::MAX = 18,446,744,073,709,551,615 (about 18.4 quintillion)
-    // When amounts are in smallest units (9 decimals), we multiply by 10^9
-    // So we need to check: (kanariAmount * 10^9) * (iotaAmount * 10^9) < u64::MAX
-    // In the contract, we use u128 for intermediate calculations, so we're safe up to u128::MAX
-    // But to be conservative, let's check if product in smallest units would overflow u64
+    const MAX_SAFE_AMOUNT = 4_000_000_000; // ~4 billion in human-readable units
     
-    const MAX_SAFE_AMOUNT = 4_000_000_000; // ~4 billion in human-readable units (very safe limit)
-    // This means max product before conversion: 4B * 4B = 16 * 10^18
-    // After conversion to smallest units: 16 * 10^36 (way less than u128::MAX)
-    
-    if (kanariAmount > MAX_SAFE_AMOUNT || iotaAmount > MAX_SAFE_AMOUNT) {
+    if (amountXNum > MAX_SAFE_AMOUNT || amountYNum > MAX_SAFE_AMOUNT) {
       alert(`Amount too large! Maximum supported: ${MAX_SAFE_AMOUNT.toLocaleString()} tokens per side`);
       return;
     }
     
-    // Additional check: product in smallest units should not overflow u64
-    // (x * 10^9) * (y * 10^9) = x*y * 10^18 < u64::MAX
-    // So x*y < u64::MAX / 10^18 ≈ 18.4
-    // But our contract uses u128 intermediate, so we can go much higher
-    // Safe limit: sqrt(u64::MAX) ≈ 4.3 billion per side
-    const productCheck = kanariAmount * iotaAmount;
-    if (productCheck > 10_000_000_000_000) { // 10 trillion (10^13) - very generous
+    const productCheck = amountXNum * amountYNum;
+    if (productCheck > 10_000_000_000_000) { // 10 trillion (10^13)
       alert("Product of amounts is too large! Try reducing both amounts.\nMax safe product: 10 trillion");
       return;
     }
@@ -146,59 +114,101 @@ export default function LiquidityInterface() {
       const amountXParsed = parseAmount(amountX);
       const amountYParsed = parseAmount(amountY);
       
-      // Debug log
       console.log("Adding liquidity:", {
-        kanari: amountX,
-        iota: amountY,
-        kanariParsed: amountXParsed,
-        iotaParsed: amountYParsed,
-        product: parseFloat(amountX) * parseFloat(amountY),
-        productInSmallestUnits: BigInt(amountXParsed) * BigInt(amountYParsed),
+        tokenX: pool.tokenXSymbol,
+        tokenY: pool.tokenYSymbol,
+        amountX,
+        amountY,
+        amountXParsed,
+        amountYParsed,
       });
       
-      // Calculate estimated LP tokens (simplified) - use more conservative calculation
-      const estimatedLP = Math.sqrt(parseFloat(amountX) * parseFloat(amountY));
-      // Use 0 as minimum to avoid issues, let the contract handle minimum liquidity
-      const minLpAmount = "0"; // Conservative: let contract decide minimum
+      const minLpAmount = "0"; // Let contract decide minimum
 
-      // Get KANARI coins from user's balance
-      const kanariCoins = await client.getCoins({
-        owner: currentAccount.address,
-        coinType: CONTRACTS.KANARI.TYPE,
-      });
+      // Check if tokenX is IOTA (0x2::iota::IOTA)
+      const isTokenXIota = pool.tokenX === "0x2::iota::IOTA";
+      const isTokenYIota = pool.tokenY === "0x2::iota::IOTA";
 
-      if (kanariCoins.data.length === 0) {
-        alert("You don't have any KANARI tokens. Please mint some first.");
-        setLoading(false);
-        return;
+      let coinX;
+      let coinY;
+
+      // Handle Token X
+      if (isTokenXIota) {
+        // Token X is IOTA - split from gas
+        [coinX] = tx.splitCoins(tx.gas, [amountXParsed]);
+      } else {
+        // Token X is custom token - fetch and merge
+        const tokenXCoins = await client.getCoins({
+          owner: currentAccount.address,
+          coinType: pool.tokenX,
+        });
+
+        if (tokenXCoins.data.length === 0) {
+          alert(`You don't have any ${pool.tokenXSymbol} tokens.`);
+          setLoading(false);
+          return;
+        }
+
+        const totalTokenX = tokenXCoins.data.reduce((sum, coin) => sum + BigInt(coin.balance), BigInt(0));
+        const requiredTokenX = BigInt(amountXParsed);
+        
+        if (totalTokenX < requiredTokenX) {
+          alert(`Insufficient ${pool.tokenXSymbol} balance!\nYou have: ${Number(totalTokenX) / 1e9}\nRequired: ${amountXNum}`);
+          setLoading(false);
+          return;
+        }
+
+        const [primaryCoinX, ...restCoinsX] = tokenXCoins.data;
+        
+        if (restCoinsX.length > 0) {
+          tx.mergeCoins(
+            tx.object(primaryCoinX.coinObjectId),
+            restCoinsX.map((coin) => tx.object(coin.coinObjectId))
+          );
+        }
+
+        [coinX] = tx.splitCoins(tx.object(primaryCoinX.coinObjectId), [amountXParsed]);
       }
 
-      // Calculate total KANARI balance
-      const totalKanari = kanariCoins.data.reduce((sum, coin) => sum + BigInt(coin.balance), BigInt(0));
-      const requiredKanari = BigInt(amountXParsed);
-      
-      if (totalKanari < requiredKanari) {
-        alert(`Insufficient KANARI balance!\nYou have: ${Number(totalKanari) / 1e9} KANARI\nRequired: ${kanariAmount} KANARI`);
-        setLoading(false);
-        return;
+      // Handle Token Y
+      if (isTokenYIota) {
+        // Token Y is IOTA - split from gas
+        [coinY] = tx.splitCoins(tx.gas, [amountYParsed]);
+      } else {
+        // Token Y is custom token - fetch and merge
+        const tokenYCoins = await client.getCoins({
+          owner: currentAccount.address,
+          coinType: pool.tokenY,
+        });
+
+        if (tokenYCoins.data.length === 0) {
+          alert(`You don't have any ${pool.tokenYSymbol} tokens.`);
+          setLoading(false);
+          return;
+        }
+
+        const totalTokenY = tokenYCoins.data.reduce((sum, coin) => sum + BigInt(coin.balance), BigInt(0));
+        const requiredTokenY = BigInt(amountYParsed);
+        
+        if (totalTokenY < requiredTokenY) {
+          alert(`Insufficient ${pool.tokenYSymbol} balance!\nYou have: ${Number(totalTokenY) / 1e9}\nRequired: ${amountYNum}`);
+          setLoading(false);
+          return;
+        }
+
+        const [primaryCoinY, ...restCoinsY] = tokenYCoins.data;
+        
+        if (restCoinsY.length > 0) {
+          tx.mergeCoins(
+            tx.object(primaryCoinY.coinObjectId),
+            restCoinsY.map((coin) => tx.object(coin.coinObjectId))
+          );
+        }
+
+        [coinY] = tx.splitCoins(tx.object(primaryCoinY.coinObjectId), [amountYParsed]);
       }
 
-      // Merge all KANARI coins into one if there are multiple
-      const [primaryKanariCoin, ...restKanariCoins] = kanariCoins.data;
-      
-      if (restKanariCoins.length > 0) {
-        tx.mergeCoins(
-          tx.object(primaryKanariCoin.coinObjectId),
-          restKanariCoins.map((coin) => tx.object(coin.coinObjectId))
-        );
-      }
-
-      // Split the exact amount needed for liquidity
-      const [coinX] = tx.splitCoins(tx.object(primaryKanariCoin.coinObjectId), [amountXParsed]);
-
-      // Split IOTA (Y token) from gas coin
-      const [coinY] = tx.splitCoins(tx.gas, [amountYParsed]);
-
+      // Add liquidity with dynamic token types
       tx.moveCall({
         target: `${CONTRACTS.PACKAGE_ID}::${MODULES.DEX_FACTORY}::${DEX_FUNCTIONS.ADD_LIQUIDITY}`,
         arguments: [
@@ -207,7 +217,7 @@ export default function LiquidityInterface() {
           coinY,
           tx.pure.u64(minLpAmount),
         ],
-        typeArguments: [CONTRACTS.KANARI.TYPE, CONTRACTS.IOTA.TYPE],
+        typeArguments: [pool.tokenX, pool.tokenY],
       });
 
       signAndExecute(
@@ -241,6 +251,13 @@ export default function LiquidityInterface() {
       return;
     }
 
+    // Find selected pool to get token types
+    const pool = pools.find(p => p.poolId === selectedPool);
+    if (!pool || !pool.tokenX || !pool.tokenY) {
+      alert("Invalid pool selected");
+      return;
+    }
+
     // Validate that selectedLPToken looks like an object ID
     if (!selectedLPToken.startsWith("0x")) {
       alert("Please select a valid LP Token.");
@@ -264,7 +281,7 @@ export default function LiquidityInterface() {
           tx.pure.u64(minAmountX),
           tx.pure.u64(minAmountY),
         ],
-        typeArguments: [CONTRACTS.KANARI.TYPE, CONTRACTS.IOTA.TYPE],
+        typeArguments: [pool.tokenX, pool.tokenY], // Use dynamic types
       });
 
       signAndExecute(
@@ -320,44 +337,49 @@ export default function LiquidityInterface() {
       <div className="space-y-4 mb-4">
         <div>
           <label className="block text-sm font-medium mb-2 text-zinc-700 dark:text-zinc-300">
-            Pool Address
+            Select Pool
           </label>
-          {pools.length > 0 ? (
-            <select
-              value={selectedPool}
-              onChange={(e) => setSelectedPool(e.target.value)}
-              className="w-full px-4 py-3 rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-            >
-              <option value="">Select a pool...</option>
-              {pools.map((pool) => (
-                <option key={pool.objectId} value={pool.objectId}>
-                  Pool {pool.objectId.slice(0, 8)}... (Fee: {(parseInt(pool.fee) / 100).toFixed(1)}%)
-                </option>
-              ))}
-            </select>
-          ) : (
+          {poolsLoading ? (
+            <div className="w-full px-4 py-3 rounded-lg border border-zinc-300 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400 text-center">
+              Loading pools...
+            </div>
+          ) : pools.length > 0 ? (
             <>
-              <input
-                type="text"
+              <select
                 value={selectedPool}
                 onChange={(e) => setSelectedPool(e.target.value)}
-                placeholder="0x..."
-                className="w-full px-4 py-3 rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono text-sm"
-              />
+                className="w-full px-4 py-3 rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="">Select a pool...</option>
+                {pools.map((pool) => (
+                  <option key={pool.poolId} value={pool.poolId}>
+                    {pool.tokenXSymbol}/{pool.tokenYSymbol} - {pool.poolId.slice(0, 8)}...{pool.poolId.slice(-6)} - Fee: {(parseInt(pool.feeBps) / 100).toFixed(2)}%
+                    {pool.reserveX && pool.reserveY && (
+                      ` - ${(parseInt(pool.reserveX) / 1e9).toFixed(2)} ${pool.tokenXSymbol} / ${(parseInt(pool.reserveY) / 1e9).toFixed(2)} ${pool.tokenYSymbol}`
+                    )}
+                  </option>
+                ))}
+              </select>
               <p className="mt-2 text-xs text-zinc-500 dark:text-zinc-400">
-                💡 Enter the Pool ID from your "Create Pool" transaction or IOTA Explorer
+                ✅ {pools.length} pool{pools.length > 1 ? 's' : ''} available
               </p>
             </>
+          ) : (
+            <div className="w-full px-4 py-3 rounded-lg border border-zinc-300 dark:border-zinc-700 bg-amber-50 dark:bg-amber-900/20 text-amber-800 dark:text-amber-200 text-sm">
+              ⚠️ No pools found. Please create a pool first using the "Create Pool" tab.
+            </div>
           )}
         </div>
       </div>
 
       {tab === "add" ? (
         <>
-          {/* KANARI Amount */}
+          {/* Token X Amount */}
           <div className="bg-zinc-50 dark:bg-zinc-800 rounded-xl p-4 mb-4">
             <div className="flex justify-between mb-2">
-              <span className="text-sm text-zinc-600 dark:text-zinc-400">KANARI</span>
+              <span className="text-sm text-zinc-600 dark:text-zinc-400">
+                {selectedPool && pools.find(p => p.poolId === selectedPool)?.tokenXSymbol || "Token X"}
+              </span>
             </div>
             <input
               type="number"
@@ -368,10 +390,12 @@ export default function LiquidityInterface() {
             />
           </div>
 
-          {/* IOTA Amount */}
+          {/* Token Y Amount */}
           <div className="bg-zinc-50 dark:bg-zinc-800 rounded-xl p-4 mb-4">
             <div className="flex justify-between mb-2">
-              <span className="text-sm text-zinc-600 dark:text-zinc-400">IOTA</span>
+              <span className="text-sm text-zinc-600 dark:text-zinc-400">
+                {selectedPool && pools.find(p => p.poolId === selectedPool)?.tokenYSymbol || "Token Y"}
+              </span>
             </div>
             <input
               type="number"

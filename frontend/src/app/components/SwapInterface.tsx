@@ -3,12 +3,13 @@
 import { useState } from "react";
 import { useSignAndExecuteTransaction, useCurrentAccount, useIotaClient } from "@iota/dapp-kit";
 import { Transaction } from "@iota/iota-sdk/transactions";
-import { CONTRACTS, MODULES, DEX_FUNCTIONS, parseAmount } from "../lib/contracts";
+import { CONTRACTS, MODULES, DEX_FUNCTIONS, parseAmount, formatAmount } from "../lib/contracts";
+import { usePools } from "../hooks/usePools";
 
 export default function SwapInterface() {
   const [amountIn, setAmountIn] = useState("");
   const [amountOut, setAmountOut] = useState("");
-  const [isXtoY, setIsXtoY] = useState(true); // true: KANARI to IOTA, false: IOTA to KANARI
+  const [isXtoY, setIsXtoY] = useState(true); // true: Token X to Token Y
   const [slippage, setSlippage] = useState("0.5"); // 0.5% default
   const [poolId, setPoolId] = useState("");
   const [loading, setLoading] = useState(false);
@@ -16,10 +17,18 @@ export default function SwapInterface() {
   const { mutate: signAndExecute } = useSignAndExecuteTransaction();
   const currentAccount = useCurrentAccount();
   const client = useIotaClient();
+  const { pools, loading: poolsLoading } = usePools();
 
   const handleSwap = async () => {
     if (!currentAccount || !amountIn || !poolId) {
-      alert("Please connect wallet, enter amount, and provide pool ID");
+      alert("Please connect wallet, enter amount, and select pool");
+      return;
+    }
+
+    // Find selected pool to get token types
+    const pool = pools.find(p => p.poolId === poolId);
+    if (!pool || !pool.tokenX || !pool.tokenY) {
+      alert("Invalid pool selected");
       return;
     }
 
@@ -29,36 +38,44 @@ export default function SwapInterface() {
       
       // Calculate minimum amount out with slippage
       const minAmountOut = parseAmount(
-        (parseFloat(amountOut) * (1 - parseFloat(slippage) / 100)).toString()
+        (parseFloat(amountOut || "0") * (1 - parseFloat(slippage) / 100)).toString()
       );
 
       const amountInParsed = parseAmount(amountIn);
 
       if (isXtoY) {
-        // Swap KANARI to IOTA - need to get KANARI coins
-        const kanariCoins = await client.getCoins({
-          owner: currentAccount.address,
-          coinType: CONTRACTS.KANARI.TYPE,
-        });
+        // Swap Token X to Token Y
+        const isTokenXIota = pool.tokenX === "0x2::iota::IOTA";
 
-        if (kanariCoins.data.length === 0) {
-          alert("You don't have any KANARI tokens.");
-          setLoading(false);
-          return;
-        }
-
-        // Merge all KANARI coins if multiple
-        const [primaryKanariCoin, ...restKanariCoins] = kanariCoins.data;
+        let coinIn;
         
-        if (restKanariCoins.length > 0) {
-          tx.mergeCoins(
-            tx.object(primaryKanariCoin.coinObjectId),
-            restKanariCoins.map((coin) => tx.object(coin.coinObjectId))
-          );
-        }
+        if (isTokenXIota) {
+          // Token X is IOTA - split from gas
+          [coinIn] = tx.splitCoins(tx.gas, [amountInParsed]);
+        } else {
+          // Token X is custom token - fetch and merge
+          const tokenXCoins = await client.getCoins({
+            owner: currentAccount.address,
+            coinType: pool.tokenX,
+          });
 
-        // Split the exact amount needed
-        const [coinIn] = tx.splitCoins(tx.object(primaryKanariCoin.coinObjectId), [amountInParsed]);
+          if (tokenXCoins.data.length === 0) {
+            alert(`You don't have any ${pool.tokenXSymbol} tokens.`);
+            setLoading(false);
+            return;
+          }
+
+          const [primaryCoin, ...restCoins] = tokenXCoins.data;
+          
+          if (restCoins.length > 0) {
+            tx.mergeCoins(
+              tx.object(primaryCoin.coinObjectId),
+              restCoins.map((coin) => tx.object(coin.coinObjectId))
+            );
+          }
+
+          [coinIn] = tx.splitCoins(tx.object(primaryCoin.coinObjectId), [amountInParsed]);
+        }
 
         tx.moveCall({
           target: `${CONTRACTS.PACKAGE_ID}::${MODULES.DEX_FACTORY}::${DEX_FUNCTIONS.SWAP_X_TO_Y}`,
@@ -67,11 +84,41 @@ export default function SwapInterface() {
             coinIn,
             tx.pure.u64(minAmountOut),
           ],
-          typeArguments: [CONTRACTS.KANARI.TYPE, CONTRACTS.IOTA.TYPE],
+          typeArguments: [pool.tokenX, pool.tokenY],
         });
       } else {
-        // Swap IOTA to KANARI - split from gas coin
-        const [coinIn] = tx.splitCoins(tx.gas, [amountInParsed]);
+        // Swap Token Y to Token X
+        const isTokenYIota = pool.tokenY === "0x2::iota::IOTA";
+
+        let coinIn;
+        
+        if (isTokenYIota) {
+          // Token Y is IOTA - split from gas
+          [coinIn] = tx.splitCoins(tx.gas, [amountInParsed]);
+        } else {
+          // Token Y is custom token - fetch and merge
+          const tokenYCoins = await client.getCoins({
+            owner: currentAccount.address,
+            coinType: pool.tokenY,
+          });
+
+          if (tokenYCoins.data.length === 0) {
+            alert(`You don't have any ${pool.tokenYSymbol} tokens.`);
+            setLoading(false);
+            return;
+          }
+
+          const [primaryCoin, ...restCoins] = tokenYCoins.data;
+          
+          if (restCoins.length > 0) {
+            tx.mergeCoins(
+              tx.object(primaryCoin.coinObjectId),
+              restCoins.map((coin) => tx.object(coin.coinObjectId))
+            );
+          }
+
+          [coinIn] = tx.splitCoins(tx.object(primaryCoin.coinObjectId), [amountInParsed]);
+        }
 
         tx.moveCall({
           target: `${CONTRACTS.PACKAGE_ID}::${MODULES.DEX_FACTORY}::${DEX_FUNCTIONS.SWAP_Y_TO_X}`,
@@ -80,7 +127,7 @@ export default function SwapInterface() {
             coinIn,
             tx.pure.u64(minAmountOut),
           ],
-          typeArguments: [CONTRACTS.KANARI.TYPE, CONTRACTS.IOTA.TYPE],
+          typeArguments: [pool.tokenX, pool.tokenY],
         });
       }
 
@@ -119,18 +166,36 @@ export default function SwapInterface() {
     <div className="bg-white dark:bg-zinc-900 rounded-2xl shadow-lg p-6 max-w-md w-full">
       <h2 className="text-2xl font-bold mb-6 text-zinc-900 dark:text-white">Swap Tokens</h2>
       
-      {/* Pool ID Input */}
+      {/* Pool Selection */}
       <div className="mb-4">
         <label className="block text-sm font-medium mb-2 text-zinc-700 dark:text-zinc-300">
-          Pool ID
+          Select Pool
         </label>
-        <input
-          type="text"
-          value={poolId}
-          onChange={(e) => setPoolId(e.target.value)}
-          placeholder="0x..."
-          className="w-full px-4 py-3 rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-        />
+        {poolsLoading ? (
+          <div className="w-full px-4 py-3 rounded-lg border border-zinc-300 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400 text-center">
+            Loading pools...
+          </div>
+        ) : pools.length > 0 ? (
+          <select
+            value={poolId}
+            onChange={(e) => setPoolId(e.target.value)}
+            className="w-full px-4 py-3 rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+          >
+            <option value="">Select a pool...</option>
+            {pools.map((pool) => (
+              <option key={pool.poolId} value={pool.poolId}>
+                {pool.tokenXSymbol}/{pool.tokenYSymbol} - {pool.poolId.slice(0, 8)}...{pool.poolId.slice(-6)} - Fee: {(parseInt(pool.feeBps) / 100).toFixed(2)}%
+                {pool.reserveX && pool.reserveY && (
+                  ` - TVL: ${(parseInt(pool.reserveX) / 1e9).toFixed(2)} ${pool.tokenXSymbol} / ${(parseInt(pool.reserveY) / 1e9).toFixed(2)} ${pool.tokenYSymbol}`
+                )}
+              </option>
+            ))}
+          </select>
+        ) : (
+          <div className="w-full px-4 py-3 rounded-lg border border-zinc-300 dark:border-zinc-700 bg-amber-50 dark:bg-amber-900/20 text-amber-800 dark:text-amber-200 text-sm">
+            ⚠️ No pools found. Please create a pool first.
+          </div>
+        )}
       </div>
 
       {/* From Token */}
@@ -138,7 +203,9 @@ export default function SwapInterface() {
         <div className="flex justify-between mb-2">
           <span className="text-sm text-zinc-600 dark:text-zinc-400">From</span>
           <span className="text-sm font-medium text-zinc-900 dark:text-white">
-            {isXtoY ? "KANARI" : "IOTA"}
+            {poolId && pools.find(p => p.poolId === poolId) 
+              ? (isXtoY ? pools.find(p => p.poolId === poolId)?.tokenXSymbol : pools.find(p => p.poolId === poolId)?.tokenYSymbol)
+              : (isXtoY ? "Token X" : "Token Y")}
           </span>
         </div>
         <input
@@ -167,7 +234,9 @@ export default function SwapInterface() {
         <div className="flex justify-between mb-2">
           <span className="text-sm text-zinc-600 dark:text-zinc-400">To</span>
           <span className="text-sm font-medium text-zinc-900 dark:text-white">
-            {isXtoY ? "IOTA" : "KANARI"}
+            {poolId && pools.find(p => p.poolId === poolId) 
+              ? (isXtoY ? pools.find(p => p.poolId === poolId)?.tokenYSymbol : pools.find(p => p.poolId === poolId)?.tokenXSymbol)
+              : (isXtoY ? "Token Y" : "Token X")}
           </span>
         </div>
         <input
