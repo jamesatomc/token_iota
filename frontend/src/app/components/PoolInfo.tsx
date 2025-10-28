@@ -95,11 +95,11 @@ export default function PoolInfo() {
   };
 
   return (
-    <div className="bg-white dark:bg-zinc-900 rounded-2xl shadow-lg p-6 max-w-md w-full">
-      <h2 className="text-2xl font-bold mb-6 text-zinc-900 dark:text-white">Pool Information</h2>
+    <div className="bg-white rounded-2xl shadow-lg p-6 max-w-md w-full">
+      <h2 className="text-2xl font-bold mb-6 text-gray-900">Pool Information</h2>
       
       <div className="mb-4">
-        <label className="block text-sm font-medium mb-2 text-zinc-700 dark:text-zinc-300">
+        <label className="block text-sm font-medium mb-2 text-zinc-700">
           Pool ID
         </label>
         <div className="flex gap-2">
@@ -108,97 +108,97 @@ export default function PoolInfo() {
             value={poolId}
             onChange={(e) => setPoolId(e.target.value)}
             placeholder="0x..."
-            className="flex-1 px-4 py-3 rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="flex-1 px-4 py-3 rounded-lg border border-gray-300 bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-600"
           />
           <button
             onClick={fetchPoolInfo}
             disabled={loading || !poolId}
-            className="px-6 py-3 bg-blue-500 hover:bg-blue-600 disabled:bg-zinc-300 disabled:dark:bg-zinc-700 text-white font-medium rounded-lg transition-colors"
+            className="px-6 py-3 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-200 text-white font-medium rounded-lg transition-colors"
           >
             {loading ? "..." : "Fetch"}
           </button>
         </div>
       </div>
-
+ 
       {poolData && (
         <div className="space-y-4">
           {/* Reserves */}
-          <div className="bg-zinc-50 dark:bg-zinc-800 rounded-xl p-4">
-            <h3 className="font-semibold text-zinc-900 dark:text-white mb-3">Reserves</h3>
+          <div className="bg-gray-50 rounded-xl p-4">
+            <h3 className="font-semibold text-gray-900 mb-3">Reserves</h3>
             <div className="space-y-2">
               <div className="flex justify-between items-center">
-                <span className="text-zinc-600 dark:text-zinc-400">KANARI</span>
-                <span className="font-mono font-semibold text-zinc-900 dark:text-white">
+                <span className="text-gray-600">KANARI</span>
+                <span className="font-mono font-semibold text-gray-900">
                   {formatAmount(toAmount(poolData.balance_x))}
                 </span>
               </div>
               <div className="flex justify-between items-center">
-                <span className="text-zinc-600 dark:text-zinc-400">IOTA</span>
-                <span className="font-mono font-semibold text-zinc-900 dark:text-white">
+                <span className="text-gray-600">IOTA</span>
+                <span className="font-mono font-semibold text-gray-900">
                   {formatAmount(toAmount(poolData.balance_y))}
                 </span>
               </div>
             </div>
           </div>
-
+ 
           {/* Prices */}
-          <div className="bg-zinc-50 dark:bg-zinc-800 rounded-xl p-4">
-            <h3 className="font-semibold text-zinc-900 dark:text-white mb-3">Prices</h3>
+          <div className="bg-gray-50 rounded-xl p-4">
+            <h3 className="font-semibold text-gray-900 mb-3">Prices</h3>
             <div className="space-y-2">
               <div className="flex justify-between items-center">
-                <span className="text-zinc-600 dark:text-zinc-400">1 IOTA =</span>
-                <span className="font-mono font-semibold text-zinc-900 dark:text-white">
+                <span className="text-gray-600">1 IOTA =</span>
+                <span className="font-mono font-semibold text-gray-900">
                   {prices.kanariPerIota} KANARI
                 </span>
               </div>
               <div className="flex justify-between items-center">
-                <span className="text-zinc-600 dark:text-zinc-400">1 KANARI =</span>
-                <span className="font-mono font-semibold text-zinc-900 dark:text-white">
+                <span className="text-gray-600">1 KANARI =</span>
+                <span className="font-mono font-semibold text-gray-900">
                   {prices.iotaPerKanari} IOTA
                 </span>
               </div>
             </div>
           </div>
-
+ 
           {/* Pool Stats */}
-          <div className="bg-zinc-50 dark:bg-zinc-800 rounded-xl p-4">
-            <h3 className="font-semibold text-zinc-900 dark:text-white mb-3">Pool Stats</h3>
+          <div className="bg-gray-50 rounded-xl p-4">
+            <h3 className="font-semibold text-gray-900 mb-3">Pool Stats</h3>
             <div className="space-y-2">
               <div className="flex justify-between items-center">
-                <span className="text-zinc-600 dark:text-zinc-400">LP Supply</span>
-                <span className="font-mono font-semibold text-zinc-900 dark:text-white">
+                <span className="text-gray-600">LP Supply</span>
+                <span className="font-mono font-semibold text-gray-900">
                   {formatAmount(toAmount(poolData.lp_supply))}
                 </span>
               </div>
               <div className="flex justify-between items-center">
-                <span className="text-zinc-600 dark:text-zinc-400">Fee</span>
-                <span className="font-mono font-semibold text-zinc-900 dark:text-white">
+                <span className="text-gray-600">Fee</span>
+                <span className="font-mono font-semibold text-gray-900">
                   {(parseInt(poolData.fee_bps) / 100).toFixed(2)}%
                 </span>
               </div>
               <div className="flex justify-between items-center">
-                <span className="text-zinc-600 dark:text-zinc-400">TVL (USD)</span>
-                <span className="font-mono font-semibold text-zinc-900 dark:text-white">
+                <span className="text-gray-600">TVL (USD)</span>
+                <span className="font-mono font-semibold text-gray-900">
                   ${((parseFloat(formatAmount(toAmount(poolData.balance_y))) * 0.15) * 2).toFixed(2)}
                 </span>
               </div>
             </div>
           </div>
-
+ 
           {/* Share Calculator (if user has LP tokens) */}
           {currentAccount && (
-            <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-xl p-4">
-              <h3 className="font-semibold text-blue-900 dark:text-blue-100 mb-2">Your Position</h3>
-              <p className="text-sm text-blue-800 dark:text-blue-200">
+            <div className="bg-gray-50 border border-gray-200 rounded-xl p-4">
+              <h3 className="font-semibold text-gray-900 mb-2">Your Position</h3>
+              <p className="text-sm text-gray-700">
                 Connect your wallet and check your LP tokens to see your pool share.
               </p>
             </div>
           )}
         </div>
       )}
-
+ 
       {!poolData && !loading && (
-        <div className="text-center py-12 text-zinc-500 dark:text-zinc-400">
+        <div className="text-center py-12 text-gray-500">
           Enter a pool ID to view information
         </div>
       )}

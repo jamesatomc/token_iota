@@ -98,7 +98,7 @@ export default function TokenManager({ isOpen, onClose, onChange }: Props) {
       <div className="w-full max-w-lg bg-white rounded-xl shadow-lg overflow-hidden">
         <div className="p-6 border-b border-gray-100 flex justify-between items-center">
           <h3 className="text-xl font-semibold text-gray-900">Token Manager</h3>
-          <button onClick={onClose} className="text-gray-600">✕</button>
+          <button onClick={onClose} className="text-gray-700">✕</button>
         </div>
 
         <div className="p-6 space-y-4">
@@ -112,7 +112,7 @@ export default function TokenManager({ isOpen, onClose, onChange }: Props) {
           {error && <div className="text-sm text-red-500">{error}</div>}
 
           <div className="flex gap-2">
-            <button onClick={handleAdd} className="px-4 py-2 rounded-lg bg-blue-500 text-white">Add Custom Token</button>
+            <button onClick={handleAdd} className="px-4 py-2 rounded-lg bg-blue-600 text-white">Add Custom Token</button>
             <button onClick={() => { setType(""); setError(null); }} className="px-4 py-2 rounded-lg bg-gray-100 text-gray-700">Clear</button>
           </div>
 

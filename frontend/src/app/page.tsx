@@ -13,95 +13,75 @@ import MintKanari from "./components/MintKanari";
 export default function Home() {
   const [activeTab, setActiveTab] = useState<"swap" | "liquidity" | "pool" | "info" | "mint">("swap");
 
+  // typed tab keys to avoid `any`
+  type TabKey = "swap" | "liquidity" | "mint" | "pool" | "info";
+  const tabs: { key: TabKey; label: string }[] = [
+    { key: "swap", label: "Swap" },
+    { key: "liquidity", label: "Add" },
+    { key: "mint", label: "Mint" },
+    { key: "pool", label: "Create Pair" },
+    { key: "info", label: "Pool Info" },
+  ];
+
   return (
     <div className="min-h-screen bg-white font-sans text-gray-900">
-      {/* Header */}
+      {/* Header (responsive: stacked on small screens, row on sm+) */}
       <header className="border-b border-gray-200 bg-white sticky top-0 z-50">
-        <div className="container mx-auto px-4 py-4">
-          <div className="flex items-center justify-between">
+        <div className="container mx-auto px-4 py-3">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            {/* left: logo + title */}
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-gradient-to-br from-blue-400 to-purple-500 rounded-xl flex items-center justify-center">
-                <span className="text-white font-bold text-xl">K</span>
+              <div className="w-10 h-10 bg-amber-400 rounded-xl flex items-center justify-center shrink-0">
+                <span className="text-white font-bold text-lg">K</span>
               </div>
               <div>
-                <h1 className="text-xl font-bold text-gray-900">Kanari Network DEX</h1>
-                <p className="text-xs text-gray-600">Powered by IOTA</p>
+                <h1 className="text-lg sm:text-xl font-bold text-gray-900">Kanari Network DEX</h1>
+                <p className="text-xs text-gray-600">Swap tokens, provide liquidity, or mint — fast and simple.</p>
               </div>
             </div>
-            <ConnectButton />
+
+            {/* right: pool TVL + connect (stack on very small screens) */}
+            <div className="flex items-center gap-3 ml-auto sm:ml-0">
+              <div className="hidden sm:flex items-center text-sm text-gray-700 gap-3 mr-2">
+                <div className="text-xs text-gray-500">Pool TVL</div>
+                <div className="font-semibold">$0</div>
+              </div>
+              <div>
+                <ConnectButton />
+              </div>
+            </div>
           </div>
         </div>
       </header>
 
       {/* Main Content */}
-      <main className="container mx-auto px-4 py-8">
+      <main className="container mx-auto px-4 py-6">
         {/* Navigation Tabs */}
-        <div className="flex justify-center mb-8">
-          <div className="inline-flex bg-white rounded-2xl p-2 shadow-sm border border-gray-200">
-            <button
-              onClick={() => setActiveTab("swap")}
-              className={`px-6 py-3 rounded-xl font-medium transition-all ${
-                activeTab === "swap"
-                  ? "bg-blue-500 text-white shadow"
-                  : "text-gray-600 hover:bg-gray-100"
-              }`}
-            >
-              Swap
-            </button>
-            <button
-              onClick={() => setActiveTab("liquidity")}
-              className={`px-6 py-3 rounded-xl font-medium transition-all ${
-                activeTab === "liquidity"
-                  ? "bg-blue-500 text-white shadow"
-                  : "text-gray-600 hover:bg-gray-100"
-              }`}
-            >
-              Liquidity
-            </button>
-            <button
-              onClick={() => setActiveTab("mint")}
-              className={`px-6 py-3 rounded-xl font-medium transition-all ${
-                activeTab === "mint"
-                  ? "bg-yellow-500 text-white shadow"
-                  : "text-gray-600 hover:bg-gray-100"
-              }`}
-            >
-              Mint
-            </button>
-            <button
-              onClick={() => setActiveTab("pool")}
-              className={`px-6 py-3 rounded-xl font-medium transition-all ${
-                activeTab === "pool"
-                  ? "bg-blue-500 text-white shadow"
-                  : "text-gray-600 hover:bg-gray-100"
-              }`}
-            >
-              Create Pool
-            </button>
-            <button
-              onClick={() => setActiveTab("info")}
-              className={`px-6 py-3 rounded-xl font-medium transition-all ${
-                activeTab === "info"
-                  ? "bg-blue-500 text-white shadow"
-                  : "text-gray-600 hover:bg-gray-100"
-              }`}
-            >
-              Pool Info
-            </button>
+        <div className="flex justify-center mb-6">
+          <div className="inline-flex bg-white rounded-2xl p-2 shadow-sm border border-gray-200 overflow-x-auto no-scrollbar">
+            {tabs.map((t) => (
+              <button
+                key={t.key}
+                onClick={() => setActiveTab(t.key)}
+                className={`whitespace-nowrap px-4 py-2 sm:px-6 sm:py-3 rounded-xl font-medium transition-all mx-1 ${activeTab === t.key ? "bg-blue-600 text-white shadow" : "text-gray-600 hover:bg-gray-100"}`}
+              >
+                {t.label}
+              </button>
+            ))}
           </div>
         </div>
 
         {/* Content Area */}
-        <div className="flex justify-center gap-6">
-          <div className="shrink-0">
+        <div className="flex flex-col md:flex-row justify-center gap-6">
+          <div className="w-full md:w-auto md:shrink-0">
             {activeTab === "swap" && <SwapInterface />}
             {activeTab === "liquidity" && <LiquidityInterface />}
             {activeTab === "mint" && <MintKanari />}
             {activeTab === "pool" && <CreatePool />}
             {activeTab === "info" && <PoolInfo />}
           </div>
-          
-          {/* Sidebar with wallet info */}
+
+          {/* Sidebar with wallet info (hidden on small screens) */}
           {/* {currentAccount && (
             <div className="hidden lg:block w-80 shrink-0">
               <WalletBalance />

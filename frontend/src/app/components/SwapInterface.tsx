@@ -601,7 +601,7 @@ export default function SwapInterface() {
       <button
         onClick={handleSwap}
         disabled={loading || !currentAccount || !amountIn || !poolId}
-        className="w-full bg-blue-500 hover:bg-blue-600 disabled:bg-gray-300 text-white font-semibold py-4 rounded-xl transition-colors disabled:cursor-not-allowed"
+        className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-gray-200 text-white font-semibold py-4 rounded-xl transition-colors disabled:cursor-not-allowed"
       >
         {loading ? "Swapping..." : !currentAccount ? "Connect Wallet" : "Swap"}
       </button>

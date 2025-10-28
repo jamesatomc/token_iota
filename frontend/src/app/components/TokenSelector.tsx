@@ -150,7 +150,7 @@ export default function TokenSelector({ isOpen, onClose, tokens, onSelect }: Pro
               value={query}
               onChange={(e) => setQuery(e.target.value)}
             />
-            <button onClick={onClose} className="px-3 py-2 text-sm text-gray-600">Close</button>
+            <button onClick={onClose} className="px-3 py-2 text-sm text-gray-700">Close</button>
           </div>
         </div>
 
@@ -165,7 +165,7 @@ export default function TokenSelector({ isOpen, onClose, tokens, onSelect }: Pro
               className="w-full text-left px-4 py-3 hover:bg-gray-50 flex items-center justify-between"
             >
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-full bg-blue-500 flex items-center justify-center text-white font-bold">{t.symbol?.[0] || "T"}</div>
+                <div className="w-10 h-10 rounded-full bg-blue-600 flex items-center justify-center text-white font-bold">{t.symbol?.[0] || "T"}</div>
                 <div className="min-w-0 flex items-center gap-2">
                   <div className="min-w-0">
                     <div className="font-semibold text-gray-900 text-sm leading-tight">{t.symbol}</div>
@@ -195,7 +195,7 @@ export default function TokenSelector({ isOpen, onClose, tokens, onSelect }: Pro
                       </svg>
                     ) : (
                       // clipboard icon
-                      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4 text-gray-500">
+                      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4 text-gray-600">
                         <path d="M9 2a1 1 0 00-1 1v1H6a2 2 0 00-2 2v8a2 2 0 002 2h8a2 2 0 002-2V6a2 2 0 00-2-2h-2V3a1 1 0 00-1-1H9z" />
                         <path d="M9 4h2v1H9V4z" />
                       </svg>
