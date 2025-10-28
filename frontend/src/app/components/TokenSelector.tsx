@@ -4,6 +4,15 @@ import React, { useEffect, useState, useRef } from "react";
 import { useIotaClient, useCurrentAccount } from "@iota/dapp-kit";
 import TokenManager from "./TokenManager";
 
+interface Coin {
+  balance?: number | string;
+  coinObjectId?: string;
+}
+
+interface IotaClientWithBalance {
+  getBalance?: (opts: { owner: string }) => Promise<{ total?: number | string } | null>;
+}
+
 export interface TokenItem {
   type: string; // full Move type path
   symbol: string;
@@ -36,7 +45,7 @@ export default function TokenSelector({ isOpen, onClose, tokens, onSelect }: Pro
       const parts = t.split("::");
       if (parts.length >= 2) return parts.slice(-2).join("::");
       return t;
-    } catch (e) {
+    } catch {
       return t;
     }
   };
@@ -46,20 +55,22 @@ export default function TokenSelector({ isOpen, onClose, tokens, onSelect }: Pro
       const raw = localStorage.getItem("dex:customTokens");
       if (raw) {
         const parsed = JSON.parse(raw) as Array<{ type: string; symbol: string; name?: string }>;
-        setCustomTokens(parsed.map((p) => ({ type: p.type, symbol: p.symbol, name: p.name })));
+        // defer state update to avoid synchronous setState inside effect
+        setTimeout(() => setCustomTokens(parsed.map((p) => ({ type: p.type, symbol: p.symbol, name: p.name }))), 0);
       } else {
-        setCustomTokens([]);
+        setTimeout(() => setCustomTokens([]), 0);
       }
-    } catch (e) {
-      setCustomTokens([]);
+    } catch {
+      setTimeout(() => setCustomTokens([]), 0);
     }
   }, [isOpen]);
 
   useEffect(() => {
     if (!isOpen) return;
 
-    // reset search query and autofocus when opened
-    setQuery("");
+  // reset search query and autofocus when opened
+  // eslint-disable-next-line react-hooks/set-state-in-effect
+  setQuery("");
     setTimeout(() => inputRef.current?.focus(), 50);
 
     // Fetch balances for displayed tokens + custom tokens
@@ -79,8 +90,9 @@ export default function TokenSelector({ isOpen, onClose, tokens, onSelect }: Pro
             // Try to use getBalance when available for native IOTA
             if (t.type === "0x2::iota::IOTA") {
               try {
-                // use any to avoid TS mismatch if getBalance not typed
-                const bal = await (client as any).getBalance?.({ owner: currentAccount.address });
+                // narrow client type and use optional getBalance
+                const c = client as unknown as IotaClientWithBalance;
+                const bal = await c.getBalance?.({ owner: currentAccount.address });
                 if (bal && typeof bal === "object") {
                   // try to extract a numeric balance
                   if (typeof bal.total === "number" || typeof bal.total === "string") {
@@ -88,15 +100,15 @@ export default function TokenSelector({ isOpen, onClose, tokens, onSelect }: Pro
                     return;
                   }
                 }
-              } catch (e) {
+              } catch {
                 // fallback to coins
               }
             }
 
             const resp = await client.getCoins({ owner: currentAccount.address, coinType: t.type });
-            const total = (resp.data || []).reduce((acc: bigint, c: any) => acc + BigInt(c.balance || 0), BigInt(0));
+            const total = (resp.data || []).reduce((acc: bigint, c: Coin) => acc + BigInt(c.balance || 0), BigInt(0));
             newBalances[t.type] = total.toString();
-          } catch (e) {
+          } catch {
             newBalances[t.type] = "0";
           }
         })
@@ -168,7 +180,7 @@ export default function TokenSelector({ isOpen, onClose, tokens, onSelect }: Pro
                         void navigator.clipboard.writeText(t.type);
                         setCopiedType(t.type);
                         setTimeout(() => setCopiedType((cur) => (cur === t.type ? null : cur)), 1400);
-                      } catch (err) {
+                      } catch {
                         // ignore
                       }
                     }}
@@ -227,19 +239,16 @@ export default function TokenSelector({ isOpen, onClose, tokens, onSelect }: Pro
             const raw = localStorage.getItem("dex:customTokens");
             if (raw) {
               const parsed = JSON.parse(raw) as Array<{ type: string; symbol: string; name?: string }>;
-              setCustomTokens(parsed.map((p) => ({ type: p.type, symbol: p.symbol, name: p.name })));
+              setTimeout(() => setCustomTokens(parsed.map((p) => ({ type: p.type, symbol: p.symbol, name: p.name }))), 0);
             } else {
-              setCustomTokens([]);
+              setTimeout(() => setCustomTokens([]), 0);
             }
-          } catch (e) {
-            setCustomTokens([]);
+          } catch {
+            setTimeout(() => setCustomTokens([]), 0);
           }
-          void (async () => {
-            // trigger balances refresh
-            if ((window as any).requestIdleCallback) {
-              (window as any).requestIdleCallback(() => {});
-            }
-          })();
+          // trigger balances refresh (use a typed window alias to avoid `any`)
+          const _w = window as unknown as { requestIdleCallback?: (cb: () => void) => void };
+          _w.requestIdleCallback?.(() => {});
         }}
         onChange={() => {
           try {
@@ -250,7 +259,7 @@ export default function TokenSelector({ isOpen, onClose, tokens, onSelect }: Pro
             } else {
               setCustomTokens([]);
             }
-          } catch (e) {
+          } catch {
             setCustomTokens([]);
           }
         }}

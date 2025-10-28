@@ -21,7 +21,7 @@ function readStored(): CustomToken[] {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return [];
     return JSON.parse(raw) as CustomToken[];
-  } catch (e) {
+  } catch {
     return [];
   }
 }
@@ -29,7 +29,7 @@ function readStored(): CustomToken[] {
 function writeStored(tokens: CustomToken[]) {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(tokens));
-  } catch (e) {
+  } catch {
     // ignore
   }
 }
@@ -41,9 +41,12 @@ export default function TokenManager({ isOpen, onClose, onChange }: Props) {
 
   useEffect(() => {
     if (!isOpen) return;
-    setTokens(readStored());
-    setType("");
-    setError(null);
+    // defer state updates to avoid synchronous setState inside effect
+    setTimeout(() => {
+      setTokens(readStored());
+      setType("");
+      setError(null);
+    }, 0);
   }, [isOpen]);
 
   if (!isOpen) return null;

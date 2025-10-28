@@ -1,17 +1,17 @@
 "use client";
 
 import { useState } from "react";
-import { ConnectButton, useCurrentAccount } from "@iota/dapp-kit";
+import { ConnectButton } from "@iota/dapp-kit";
 import SwapInterface from "./components/SwapInterface";
 import LiquidityInterface from "./components/LiquidityInterface";
 import CreatePool from "./components/CreatePool";
 import PoolInfo from "./components/PoolInfo";
-import WalletBalance from "./components/WalletBalance";
+// WalletBalance intentionally unused in layout; uncomment and use in sidebar when needed
+// import WalletBalance from "./components/WalletBalance";
 import MintKanari from "./components/MintKanari";
 
 export default function Home() {
   const [activeTab, setActiveTab] = useState<"swap" | "liquidity" | "pool" | "info" | "mint">("swap");
-  const currentAccount = useCurrentAccount();
 
   return (
     <div className="min-h-screen bg-linear-to-br from-blue-50 via-white to-purple-50 dark:from-zinc-900 dark:via-black dark:to-zinc-900 font-sans">

@@ -44,7 +44,7 @@ export default function CreatePool() {
         const hit = parsed.find((p) => p.type === t);
         if (hit) return hit.symbol;
       }
-    } catch (e) {
+    } catch {
       // ignore
     }
     const parts = t.split("::");
@@ -58,7 +58,7 @@ export default function CreatePool() {
       const parts = t.split("::");
       if (parts.length >= 2) return parts.slice(-2).join("::");
       return t;
-    } catch (e) {
+    } catch {
       return t;
     }
   };
@@ -167,13 +167,13 @@ export default function CreatePool() {
                   <span
                     role="button"
                     tabIndex={0}
-                    onClick={(e) => {
-                      e.stopPropagation();
+                    onClick={(_e) => {
+                      _e.stopPropagation();
                       try {
                         void navigator.clipboard.writeText(tokenXType);
                         setCopiedX(true);
                         setTimeout(() => setCopiedX(false), 1400);
-                      } catch (err) {
+                      } catch {
                         // ignore
                       }
                     }}
@@ -207,13 +207,13 @@ export default function CreatePool() {
                   <span
                     role="button"
                     tabIndex={0}
-                    onClick={(e) => {
-                      e.stopPropagation();
+                    onClick={(_e) => {
+                      _e.stopPropagation();
                       try {
                         void navigator.clipboard.writeText(tokenYType);
                         setCopiedY(true);
                         setTimeout(() => setCopiedY(false), 1400);
-                      } catch (err) {
+                      } catch {
                         // ignore
                       }
                     }}

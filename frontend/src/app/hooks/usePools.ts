@@ -42,9 +42,11 @@ export function usePools() {
         const poolsData: PoolData[] = [];
         
         for (const event of response.data) {
-          if (event.parsedJson) {
-            const poolId = (event.parsedJson as any).pool_id;
-            const feeBps = (event.parsedJson as any).fee_bps;
+          const parsed = event.parsedJson;
+          if (parsed && typeof parsed === "object") {
+            const parsedObj = parsed as Record<string, unknown>;
+            const poolId = String(parsedObj.pool_id ?? "");
+            const feeBps = String(parsedObj.fee_bps ?? "0");
 
             // Fetch current pool state to get reserves AND token types
             try {
@@ -56,8 +58,8 @@ export function usePools() {
                 },
               });
 
-              if (poolObject.data?.content?.dataType === "moveObject" && poolObject.data.type) {
-                const fields = poolObject.data.content.fields as any;
+                if (poolObject.data?.content?.dataType === "moveObject" && poolObject.data.type) {
+                const fields = (poolObject.data.content.fields ?? {}) as Record<string, unknown>;
                 
                 // Extract token types from pool type string
                 // Format: "0x...::DEX::LiquidityPool<0x...::token::TOKEN, 0x2::iota::IOTA>"
@@ -79,16 +81,20 @@ export function usePools() {
                   tokenYSymbol = yParts[yParts.length - 1] || "Token Y";
                 }
                 
+                const reserveX = String(fields["balance_x"] ?? "0");
+                const reserveY = String(fields["balance_y"] ?? "0");
+                const lpSupply = String(fields["lp_supply"] ?? "0");
+
                 poolsData.push({
                   poolId,
-                  feeBps: feeBps.toString(),
+                  feeBps,
                   tokenX,
                   tokenY,
                   tokenXSymbol,
                   tokenYSymbol,
-                  reserveX: fields.balance_x || "0",
-                  reserveY: fields.balance_y || "0",
-                  lpSupply: fields.lp_supply || "0",
+                  reserveX,
+                  reserveY,
+                  lpSupply,
                 });
               } else {
                 // Pool exists but we couldn't get details

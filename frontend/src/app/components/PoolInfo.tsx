@@ -2,11 +2,25 @@
 
 import { useState } from "react";
 import { useCurrentAccount, useIotaClient } from "@iota/dapp-kit";
-import { CONTRACTS, formatAmount } from "../lib/contracts";
+import { formatAmount } from "../lib/contracts";
+
+interface PoolData {
+  balance_x: string;
+  balance_y: string;
+  fee_bps: string;
+  lp_supply: string;
+}
+
+interface RawFields {
+  balance_x?: string | number;
+  balance_y?: string | number;
+  fee_bps?: string | number;
+  lp_supply?: string | number;
+}
 
 export default function PoolInfo() {
   const [poolId, setPoolId] = useState("");
-  const [poolData, setPoolData] = useState<any>(null);
+  const [poolData, setPoolData] = useState<PoolData | null>(null);
   const [loading, setLoading] = useState(false);
   
   const client = useIotaClient();
@@ -30,13 +44,13 @@ export default function PoolInfo() {
       });
 
       if (poolObject.data?.content?.dataType === "moveObject") {
-        const fields = poolObject.data.content.fields as any;
-        
+        const fields = poolObject.data.content.fields as RawFields | undefined;
+
         setPoolData({
-          balance_x: fields.balance_x || "0",
-          balance_y: fields.balance_y || "0",
-          fee_bps: fields.fee_bps || "0",
-          lp_supply: fields.lp_supply || "0",
+          balance_x: String(fields?.balance_x ?? "0"),
+          balance_y: String(fields?.balance_y ?? "0"),
+          fee_bps: String(fields?.fee_bps ?? "0"),
+          lp_supply: String(fields?.lp_supply ?? "0"),
         });
       } else {
         alert("Invalid pool object");
@@ -64,6 +78,21 @@ export default function PoolInfo() {
   };
 
   const prices = calculatePrice();
+
+  const toAmount = (s: string) => {
+    if (!s) return 0;
+    // if it's an integer string, prefer BigInt to preserve precision
+    if (/^\d+$/.test(s)) {
+      try {
+        return BigInt(s);
+      } catch {
+        const n = Number(s);
+        return isNaN(n) ? 0 : n;
+      }
+    }
+    const n = Number(s);
+    return isNaN(n) ? 0 : n;
+  };
 
   return (
     <div className="bg-white dark:bg-zinc-900 rounded-2xl shadow-lg p-6 max-w-md w-full">
@@ -100,13 +129,13 @@ export default function PoolInfo() {
               <div className="flex justify-between items-center">
                 <span className="text-zinc-600 dark:text-zinc-400">KANARI</span>
                 <span className="font-mono font-semibold text-zinc-900 dark:text-white">
-                  {formatAmount(poolData.balance_x)}
+                  {formatAmount(toAmount(poolData.balance_x))}
                 </span>
               </div>
               <div className="flex justify-between items-center">
                 <span className="text-zinc-600 dark:text-zinc-400">IOTA</span>
                 <span className="font-mono font-semibold text-zinc-900 dark:text-white">
-                  {formatAmount(poolData.balance_y)}
+                  {formatAmount(toAmount(poolData.balance_y))}
                 </span>
               </div>
             </div>
@@ -138,7 +167,7 @@ export default function PoolInfo() {
               <div className="flex justify-between items-center">
                 <span className="text-zinc-600 dark:text-zinc-400">LP Supply</span>
                 <span className="font-mono font-semibold text-zinc-900 dark:text-white">
-                  {formatAmount(poolData.lp_supply)}
+                  {formatAmount(toAmount(poolData.lp_supply))}
                 </span>
               </div>
               <div className="flex justify-between items-center">
@@ -150,7 +179,7 @@ export default function PoolInfo() {
               <div className="flex justify-between items-center">
                 <span className="text-zinc-600 dark:text-zinc-400">TVL (USD)</span>
                 <span className="font-mono font-semibold text-zinc-900 dark:text-white">
-                  ${((parseFloat(formatAmount(poolData.balance_y)) * 0.15) * 2).toFixed(2)}
+                  ${((parseFloat(formatAmount(toAmount(poolData.balance_y))) * 0.15) * 2).toFixed(2)}
                 </span>
               </div>
             </div>

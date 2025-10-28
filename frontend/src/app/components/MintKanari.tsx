@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useSignAndExecuteTransaction, useCurrentAccount } from "@iota/dapp-kit";
 import { Transaction } from "@iota/iota-sdk/transactions";
-import { CONTRACTS, MODULES, parseAmount, formatAmount } from "../lib/contracts";
+import { CONTRACTS, MODULES, parseAmount } from "../lib/contracts";
 
 export default function MintKanari() {
   const [amount, setAmount] = useState("");

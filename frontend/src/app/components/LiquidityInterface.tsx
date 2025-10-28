@@ -11,11 +11,32 @@ interface LPTokenInfo {
   amount: string;
 }
 
+// Minimal local types to avoid `any` in a couple of places
+interface Coin {
+  balance?: number | string;
+  coinObjectId?: string;
+}
+
+interface IotaClientWithBalance {
+  getBalance?: (opts: { owner: string }) => Promise<{ total?: number | string } | null>;
+}
+
+interface OwnedObject {
+  data: {
+    objectId: string;
+    content?: {
+      dataType?: string;
+      // use unknown instead of any to avoid ESLint no-explicit-any
+      fields?: { amount?: string } | Record<string, unknown>;
+    };
+  };
+}
+
 export default function LiquidityInterface() {
   const [tab, setTab] = useState<"add" | "remove">("add");
   const [amountX, setAmountX] = useState("");
   const [amountY, setAmountY] = useState("");
-  const [isEstimating, setIsEstimating] = useState(false);
+  // removed isEstimating state (was unused)
   const [selectedPool, setSelectedPool] = useState("");
   const [selectedLPToken, setSelectedLPToken] = useState("");
   const [slippage, setSlippage] = useState("0.5");
@@ -43,17 +64,21 @@ export default function LiquidityInterface() {
         try {
           if (t === "0x2::iota::IOTA") {
             try {
-              const bal = await (client as any).getBalance?.({ owner: currentAccount.address });
+              // avoid `any` by narrowing client for the optional getBalance method
+              const c = client as unknown as IotaClientWithBalance;
+              const bal = await c.getBalance?.({ owner: currentAccount.address });
               if (bal && typeof bal === 'object' && (typeof bal.total === 'number' || typeof bal.total === 'string')) {
                 map[t] = String(bal.total ?? 0);
                 return;
               }
-            } catch (e) { }
+            } catch {
+              // ignore balance lookup errors
+            }
           }
           const resp = await client.getCoins({ owner: currentAccount.address, coinType: t });
-          const total = (resp.data || []).reduce((acc: bigint, c: any) => acc + BigInt(c.balance || 0), BigInt(0));
+          const total = (resp.data || []).reduce((acc: bigint, c: Coin) => acc + BigInt(c.balance || 0), BigInt(0));
           map[t] = total.toString();
-        } catch (e) {
+        } catch {
           map[t] = '0';
         }
       }));
@@ -84,7 +109,7 @@ export default function LiquidityInterface() {
       const v = parseFloat(humanStr || "0");
       if (!isFinite(v) || v <= 0) return BigInt(0);
       return BigInt(Math.floor(v * 1e9));
-    } catch (e) {
+    } catch {
       return BigInt(0);
     }
   };
@@ -93,7 +118,7 @@ export default function LiquidityInterface() {
     try {
       const human = Number(raw) / 1e9;
       return human.toLocaleString(undefined, { maximumFractionDigits: maxFrac });
-    } catch (e) {
+    } catch {
       return "0";
     }
   };
@@ -161,12 +186,15 @@ export default function LiquidityInterface() {
           },
         });
 
-        const tokenData: LPTokenInfo[] = response.data
+        const tokenData: LPTokenInfo[] = (response.data || [])
           .filter((obj) => obj.data?.content?.dataType === "moveObject")
-          .map((obj: any) => ({
-            objectId: obj.data.objectId,
-            amount: obj.data.content?.fields?.amount || "0",
-          }));
+          .map((obj) => {
+            const o = obj as OwnedObject;
+            return {
+              objectId: o.data.objectId,
+              amount: String(o.data.content?.fields?.amount ?? "0"),
+            };
+          });
 
         setLPTokens(tokenData);
         
@@ -417,16 +445,7 @@ export default function LiquidityInterface() {
     }
   };
 
-  // show a small estimating/loading state while user types amounts
-  useEffect(() => {
-    if (!amountX && !amountY) {
-      setIsEstimating(false);
-      return;
-    }
-    setIsEstimating(true);
-    const t = setTimeout(() => setIsEstimating(false), 400);
-    return () => clearTimeout(t);
-  }, [amountX, amountY]);
+  // (estimation debounce removed - state was unused)
 
   return (
     <div className="bg-white dark:bg-zinc-900 rounded-2xl shadow-lg p-6 max-w-md w-full">
@@ -514,7 +533,7 @@ export default function LiquidityInterface() {
             </>
           ) : (
             <div className="w-full px-4 py-3 rounded-lg border border-zinc-300 dark:border-zinc-700 bg-amber-50 dark:bg-amber-900/20 text-amber-800 dark:text-amber-200 text-sm">
-              ⚠️ No pools found. Please create a pool first using the "Create Pool" tab.
+              ⚠️ No pools found. Please create a pool first using the &quot;Create Pool&quot; tab.
             </div>
           )}
         </div>
@@ -652,7 +671,7 @@ export default function LiquidityInterface() {
                   Add liquidity to the current pool to receive LP tokens.
                   <br />
                   <span className="text-amber-600 dark:text-amber-400">
-                    Note: LP tokens from old deployments won't work with the new pool.
+                    Note: LP tokens from old deployments won&apos;t work with the new pool.
                   </span>
                 </p>
               </div>

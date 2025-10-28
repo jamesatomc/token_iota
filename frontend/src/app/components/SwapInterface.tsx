@@ -1,9 +1,9 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useSignAndExecuteTransaction, useCurrentAccount, useIotaClient } from "@iota/dapp-kit";
 import { Transaction } from "@iota/iota-sdk/transactions";
-import { CONTRACTS, MODULES, DEX_FUNCTIONS, parseAmount, formatAmount } from "../lib/contracts";
+import { CONTRACTS, MODULES, DEX_FUNCTIONS, parseAmount } from "../lib/contracts";
 import { usePools } from "../hooks/usePools";
 import TokenSelector from "./TokenSelector";
 
@@ -44,7 +44,7 @@ export default function SwapInterface() {
     }, [] as { type: string; symbol: string }[]);
 
   // Fetch balances for chosen tokens when pool or account changes
-  const fetchBalances = async () => {
+  const fetchBalances = useCallback(async () => {
     if (!client || !currentAccount) return;
     const map: Record<string, string> = { ...(balancesMap || {}) };
     const typesToFetch = new Set<string>();
@@ -60,28 +60,31 @@ export default function SwapInterface() {
             // Try SDK getBalance first, but if it doesn't return a numeric total,
             // fall back to summing coins (so we don't set 0 prematurely).
             try {
-              const bal = await (client as any).getBalance?.({ owner: currentAccount.address });
+              const bal = await (client as unknown as { getBalance?: (opts: { owner: string }) => Promise<{ total?: number | string } | undefined> }).getBalance?.({ owner: currentAccount.address });
               if (bal && typeof bal === "object" && (typeof bal.total === "number" || typeof bal.total === "string")) {
                 map[t] = String(bal.total ?? 0);
                 return;
               }
-            } catch (e) {
+            } catch {
               // ignore and fall back to coins
             }
             // fall through to summing coins below
           }
 
           const resp = await client.getCoins({ owner: currentAccount.address, coinType: t });
-          const total = (resp.data || []).reduce((acc: bigint, c: any) => acc + BigInt(c.balance || 0), BigInt(0));
+          const total = (resp.data || []).reduce((acc: bigint, c: unknown) => {
+            const balanceVal = (c as { balance?: string | number } | undefined)?.balance ?? 0;
+            return acc + BigInt(String(balanceVal));
+          }, BigInt(0));
           map[t] = total.toString();
-        } catch (e) {
+        } catch {
           map[t] = map[t] || "0";
         }
       })
     );
 
     setBalancesMap(map);
-  };
+  }, [client, currentAccount, tokenFromType, tokenToType, /* tokenCandidates derived from pools */ balancesMap, tokenCandidates]);
 
 
   const handleSwap = async () => {
@@ -263,12 +266,12 @@ export default function SwapInterface() {
     setTokenToSymbol(p.tokenYSymbol || (p.tokenY.split("::").pop() ?? null));
     // fetch balances for these tokens
     void fetchBalances();
-  }, [poolId, pools]);
+  }, [poolId, pools, fetchBalances]);
 
   // Effect: refetch balances when account/client change
   useEffect(() => {
     void fetchBalances();
-  }, [client, currentAccount]);
+  }, [client, currentAccount, fetchBalances]);
 
   const getHumanBalance = (t?: string | null) => {
     if (!t) return 0;
@@ -276,7 +279,7 @@ export default function SwapInterface() {
       const raw = balancesMap[t];
       if (!raw) return 0;
       return Number(raw) / 1e9;
-    } catch (e) {
+    } catch {
       return 0;
     }
   };
@@ -287,7 +290,7 @@ export default function SwapInterface() {
       const v = parseFloat(humanStr || "0");
       if (!isFinite(v) || v <= 0) return BigInt(0);
       return BigInt(Math.floor(v * 1e9));
-    } catch (e) {
+    } catch {
       return BigInt(0);
     }
   };
@@ -297,7 +300,7 @@ export default function SwapInterface() {
       const div = 10 ** decimals;
       const n = Number(raw) / div;
       return n.toLocaleString(undefined, { maximumFractionDigits: maxFraction });
-    } catch (e) {
+    } catch {
       // fallback
       return "0";
     }
@@ -310,7 +313,7 @@ export default function SwapInterface() {
       const parts = t.split("::");
       if (parts.length >= 2) return parts.slice(-2).join("::");
       return t;
-    } catch (e) {
+    } catch {
       return t;
     }
   };
@@ -377,7 +380,7 @@ export default function SwapInterface() {
 
     try {
       computeOutput();
-    } catch (e) {
+    } catch {
       setAmountOut("");
     }
   }, [amountIn, poolId, pools, isXtoY]);
