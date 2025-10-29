@@ -2,7 +2,9 @@
 module kanari_network::DEXFactory;
 
 use iota::coin;
+use iota::clock::Clock;
 use kanari_network::DEX::{Self, LiquidityPool, LPToken, GlobalPoolRegistry};
+use kanari_network::PriceOracle;
 
 /// Create global pool registry (must be called once before creating any pools)
 public entry fun create_registry(ctx: &mut TxContext) {
@@ -76,4 +78,27 @@ public entry fun swap_y_to_x<X, Y>(
 ) {
     let coin_x = DEX::swap_y_to_x(pool, coin_y, min_x_out, ctx);
     transfer::public_transfer(coin_x, ctx.sender());
+}
+
+// ========== Price Oracle Functions ==========
+
+/// Create a new TWAP Price Oracle for a pool
+/// max_observations: Number of price observations to keep (e.g., 100)
+public entry fun create_oracle<X, Y>(
+    pool: &LiquidityPool<X, Y>,
+    max_observations: u64,
+    clock: &Clock,
+    ctx: &mut TxContext,
+) {
+    PriceOracle::create_and_share_oracle<X, Y>(pool, max_observations, clock, ctx);
+}
+
+/// Update oracle with current pool price (can be called by anyone)
+/// Should be called regularly to maintain accurate TWAP
+public entry fun update_oracle<X, Y>(
+    oracle: &mut PriceOracle::PriceOracle<X, Y>,
+    pool: &LiquidityPool<X, Y>,
+    clock: &Clock,
+) {
+    PriceOracle::update_oracle(oracle, pool, clock);
 }

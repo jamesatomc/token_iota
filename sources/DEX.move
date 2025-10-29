@@ -549,6 +549,11 @@ public fun get_lp_token_amount<X, Y>(lp_token: &LPToken<X, Y>): u64 {
     lp_token.amount
 }
 
+/// Get pool ID (address)
+public fun get_pool_id<X, Y>(pool: &LiquidityPool<X, Y>): address {
+    object::uid_to_address(&pool.id)
+}
+
 /// Calculate swap output (view function)
 public fun get_amount_out<X, Y>(pool: &LiquidityPool<X, Y>, amount_in: u64, is_x_to_y: bool): u64 {
     if (is_x_to_y) {

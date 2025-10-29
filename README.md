@@ -6,6 +6,7 @@ This repository contains the Kanari Network DEX (Decentralized Exchange) with th
 - `kanari` - KANARI token implementation
 - `DEX` - Core AMM (Automated Market Maker) liquidity pool logic
 - `DEXFactory` - Entry point functions for creating and managing pools
+- `PriceOracle` - TWAP (Time-Weighted Average Price) oracle for manipulation-resistant price feeds
 
 ## Features
 
@@ -17,12 +18,20 @@ This repository contains the Kanari Network DEX (Decentralized Exchange) with th
 
 ### DEX (Core AMM)
 
-- **Duplicate Pool Prevention** — Uses GlobalPoolRegistry to prevent creating duplicate pools for the same token pair
+- **Duplicate Pool Prevention** — Uses GlobalPoolRegistry to prevent creating duplicate pools for the same token pair (works even if tokens are swapped)
 - Constant product AMM (x * y = k) with three fee tiers
 - Slippage protection on all operations
 - LP token receipts for liquidity providers
 - Overflow-safe math with u128
 - Minimum liquidity lock to prevent attacks
+
+### Price Oracle (TWAP)
+
+- **Manipulation Resistant** — Time-weighted average prices prevent flash attacks
+- **Gas Efficient** — No external oracle dependencies
+- **Configurable History** — Adjustable observation window (e.g., 100 observations)
+- **Multiple Time Windows** — Support for 1m, 5m, 15m, 1h TWAP calculations
+- See [ORACLE_GUIDE.md](./ORACLE_GUIDE.md) for detailed documentation
 
 ### Fee Tiers
 
