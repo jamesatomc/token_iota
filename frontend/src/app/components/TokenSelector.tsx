@@ -1,8 +1,8 @@
 "use client";
 
-import React, { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useIotaClient, useCurrentAccount } from "@iota/dapp-kit";
-import { CONTRACTS } from "../lib/contracts";
+import { CONTRACTS, TokenItem, DEFAULT_TOKENS } from "../lib/contracts";
 import TokenManager from "./TokenManager";
 
 interface Coin {
@@ -14,16 +14,11 @@ interface IotaClientWithBalance {
   getBalance?: (opts: { owner: string }) => Promise<{ total?: number | string } | null>;
 }
 
-export interface TokenItem {
-  type: string; // full Move type path
-  symbol: string;
-  name?: string;
-}
-
 interface Props {
   isOpen: boolean;
   onClose: () => void;
-  tokens: TokenItem[];
+  // optional list of tokens to show; TokenSelector will merge with DEFAULT_TOKENS and custom tokens
+  tokens?: TokenItem[];
   onSelect: (tokenType: string, symbol: string) => void;
 }
 
@@ -125,8 +120,10 @@ export default function TokenSelector({ isOpen, onClose, tokens, onSelect }: Pro
 
   if (!isOpen) return null;
 
-  // combine passed tokens with custom tokens stored locally
-  const combinedTokens = [...(tokens || []), ...customTokens].reduce((acc: TokenItem[], t) => {
+  // combine passed tokens (or defaults) with custom tokens stored locally
+  const baseTokens = (tokens && tokens.length > 0) ? tokens : DEFAULT_TOKENS;
+
+  const combinedTokens = [...baseTokens, ...customTokens].reduce((acc: TokenItem[], t) => {
     if (!acc.find((x) => x.type === t.type)) acc.push(t);
     return acc;
   }, [] as TokenItem[]);

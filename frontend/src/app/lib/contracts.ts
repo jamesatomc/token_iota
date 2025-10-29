@@ -36,6 +36,19 @@ export const MODULES = {
   PRICE_ORACLE: "PriceOracle",
 };
 
+// Shared TokenItem type and default token list used across the UI
+export type TokenItem = {
+  type: string;
+  symbol: string;
+  name?: string;
+};
+
+// Default tokens shown in selectors (can be extended by TokenManager/custom tokens)
+export const DEFAULT_TOKENS: TokenItem[] = [
+  { type: CONTRACTS.KANARI.TYPE, symbol: "KANARI", name: "Kanari Token" },
+  { type: CONTRACTS.IOTA.TYPE, symbol: "IOTA", name: "IOTA" },
+];
+
 // Function names for DEX
 export const DEX_FUNCTIONS = {
   CREATE_REGISTRY: "create_registry",
@@ -73,6 +86,7 @@ export const DEEPBOOK_FUNCTIONS = {
   CANCEL_ORDER: "cancel_order",
   GET_BEST_BID: "get_best_bid",
   GET_BEST_ASK: "get_best_ask",
+  GET_MAX_DEPTH: "get_max_depth",
   GET_BOOK_DEPTH: "get_book_depth",
   GET_SPREAD: "get_spread",
   GET_ALL_BIDS: "get_all_bids",

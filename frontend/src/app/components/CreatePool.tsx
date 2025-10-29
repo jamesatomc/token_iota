@@ -4,8 +4,9 @@ import { useState } from "react";
 import { useSignAndExecuteTransaction, useCurrentAccount } from "@iota/dapp-kit";
 import { Transaction } from "@iota/iota-sdk/transactions";
 import { CONTRACTS, MODULES, DEX_FUNCTIONS } from "../lib/contracts";
-import TokenSelector, { TokenItem } from "./TokenSelector";
+import TokenSelector from "./TokenSelector";
 import TokenManager from "./TokenManager";
+import { DEFAULT_TOKENS } from "../lib/contracts";
 import Card from "./UI/Card";
 
 export default function CreatePool() {
@@ -28,15 +29,11 @@ export default function CreatePool() {
     high: { bps: CONTRACTS.FEE_HIGH, display: "1.0%" },
   };
 
-  // simple default token list (TokenSelector will merge with local custom tokens)
-  const defaultTokens: TokenItem[] = [
-    { type: CONTRACTS.KANARI.TYPE, symbol: "KANARI", name: "Kanari Token" },
-    { type: CONTRACTS.IOTA.TYPE, symbol: "IOTA", name: "IOTA" },
-  ];
+  // default token list is provided by DEFAULT_TOKENS in contracts.ts
 
   const getSymbolForType = (t: string) => {
     if (!t) return "?";
-    const found = defaultTokens.find((x) => x.type === t);
+  const found = DEFAULT_TOKENS.find((x) => x.type === t);
     if (found) return found.symbol;
     try {
       const raw = localStorage.getItem("dex:customTokens");
@@ -334,7 +331,7 @@ export default function CreatePool() {
         <TokenSelector
           isOpen={showSelectorX}
           onClose={() => setShowSelectorX(false)}
-          tokens={defaultTokens}
+          tokens={DEFAULT_TOKENS}
           onSelect={(type) => {
             setTokenXType(type);
             setShowSelectorX(false);
@@ -346,7 +343,7 @@ export default function CreatePool() {
         <TokenSelector
           isOpen={showSelectorY}
           onClose={() => setShowSelectorY(false)}
-          tokens={defaultTokens}
+          tokens={DEFAULT_TOKENS}
           onSelect={(type) => {
             setTokenYType(type);
             setShowSelectorY(false);

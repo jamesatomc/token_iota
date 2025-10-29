@@ -1,5 +1,9 @@
 module kanari_network::DeepBook;
 
+use std::vector;
+use iota::object::{Self, UID};
+use iota::transfer;
+use iota::tx_context;
 use iota::balance::{Self, Balance};
 use iota::coin::{Self, Coin};
 use iota::event;
@@ -11,9 +15,15 @@ const E_INVALID_QUANTITY: u64 = 3;
 const E_ORDER_NOT_FOUND: u64 = 4;
 const E_UNAUTHORIZED: u64 = 5;
 const E_INVALID_FEE: u64 = 6;
+const E_INVALID_DEPTH: u64 = 7;
+
+// Safe upper bound for casting u128 -> u64
+const U64_MAX: u128 = 18446744073709551615u128;
 
 // Price scale factor (normalize prices to 9 decimals)
 const PRICE_SCALE: u128 = 1_000_000_000;
+
+// NOTE: max_depth is now configured when creating the book via create_order_book
 
 /// Limit order in the book
 public struct LimitOrder has copy, drop, store {
@@ -37,6 +47,7 @@ public struct OrderBook<phantom Base, phantom Quote> has key {
     fee_balance_base: Balance<Base>,   // collected fees in base
     fee_balance_quote: Balance<Quote>, // collected fees in quote
     fee_bps: u64, // fee in basis points (e.g., 30 = 0.3%)
+    max_depth: u64,
 }
 
 // Events
@@ -66,10 +77,14 @@ public struct OrderCancelled has copy, drop {
 /// Create a new order book
 public entry fun create_order_book<Base, Quote>(
     fee_bps: u64,
+    max_depth: u64,
     ctx: &mut tx_context::TxContext
 ) {
     assert!(fee_bps <= 1000, E_INVALID_FEE); // max 10%
-    
+    // validate depth (1 .. 10_000)
+    assert!(max_depth > 0, E_INVALID_DEPTH);
+    assert!(max_depth <= 10000, E_INVALID_DEPTH);
+
     let book = OrderBook<Base, Quote> {
         id: object::new(ctx),
         next_order_id: 1,
@@ -80,8 +95,9 @@ public entry fun create_order_book<Base, Quote>(
         fee_balance_base: balance::zero(),
         fee_balance_quote: balance::zero(),
         fee_bps,
+        max_depth: max_depth,
     };
-    
+
     transfer::share_object(book);
 }
 
@@ -134,34 +150,45 @@ public entry fun place_bid<Base, Quote>(
             let available = ask.quantity - ask.filled;
             let matched = if (available <= remaining) { available } else { remaining };
             
-            // Calculate amounts
-            let match_price = ask.price; // use ask price for execution
-            let quote_amount = ((matched as u128) * (match_price as u128) / PRICE_SCALE) as u64;
-            
-            // Calculate and collect fee from taker (buyer)
-            let fee_amount = (quote_amount * book.fee_bps) / 10000;
-            let maker_receives = quote_amount - fee_amount; // maker gets amount minus fee
-            
+            // Calculate amounts (use ask price for execution), use u128 intermediates
+            let match_price = ask.price;
+            let matched_u128 = (matched as u128);
+            let price_u128 = (match_price as u128);
+            let trade_value_u128 = (matched_u128 * price_u128) / PRICE_SCALE;
+
+            // bounds check before casting
+            assert!(trade_value_u128 <= U64_MAX, E_INSUFFICIENT_LIQUIDITY);
+            let quote_amount = trade_value_u128 as u64;
+
+            // fee in quote tokens (percentage of trade value)
+            let fee_u128 = (trade_value_u128 * (book.fee_bps as u128)) / 10000u128;
+            assert!(fee_u128 <= U64_MAX, E_INVALID_FEE);
+            let fee_amount = fee_u128 as u64;
+
+            // maker (ask.maker) receives quote_amount minus fee; taker (bidder) provides the locked quote
+            let maker_receives = quote_amount - fee_amount;
+
             // Update order
             ask.filled = ask.filled + matched;
             remaining = remaining - matched;
-            remaining_locked = remaining_locked - quote_amount - fee_amount;
-            
+            // only reduce locked by the quoted value used for match (fee is taken from that amount)
+            remaining_locked = remaining_locked - quote_amount;
+
             // Transfer base to taker (buyer)
             let base_to_taker = balance::split(&mut book.base_balance, matched);
             transfer::public_transfer(
                 coin::from_balance(base_to_taker, ctx),
                 maker
             );
-            
-            // Transfer quote to maker (seller)
+
+            // Transfer quote to maker (seller) - maker receives quote minus fee
             let quote_to_maker = balance::split(&mut book.quote_balance, maker_receives);
             transfer::public_transfer(
                 coin::from_balance(quote_to_maker, ctx),
                 ask.maker
             );
-            
-            // Collect fee
+
+            // Collect fee (in quote tokens)
             let fee_collected = balance::split(&mut book.quote_balance, fee_amount);
             balance::join(&mut book.fee_balance_quote, fee_collected);
             
@@ -198,7 +225,25 @@ public entry fun place_bid<Base, Quote>(
         };
         
         // Insert in sorted order (highest price first)
-        let len = vector::length(&book.bids);
+        let mut len = vector::length(&book.bids);
+
+        // If side is full, remove worst bid (last element) and refund its unmatched locked quote
+        if (len >= book.max_depth) {
+            let worst = vector::pop_back(&mut book.bids);
+            let unmatched = worst.quantity - worst.filled;
+            if (unmatched > 0) {
+                let refund_quote = ((unmatched as u128) * (worst.price as u128) / PRICE_SCALE) as u64;
+                if (refund_quote > 0) {
+                    let refund = balance::split(&mut book.quote_balance, refund_quote);
+                    transfer::public_transfer(
+                        coin::from_balance(refund, ctx),
+                        worst.maker
+                    );
+                };
+            };
+            len = len - 1;
+        };
+
         let mut insert_pos = len;
         let mut j = 0;
         while (j < len) {
@@ -209,7 +254,7 @@ public entry fun place_bid<Base, Quote>(
             };
             j = j + 1;
         };
-        
+
         if (insert_pos == len) {
             vector::push_back(&mut book.bids, new_order);
         } else {
@@ -273,34 +318,43 @@ public entry fun place_ask<Base, Quote>(
             let available = bid.quantity - bid.filled;
             let matched = if (available <= remaining) { available } else { remaining };
             
-            // Calculate amounts (use bid price for execution)
+            // Calculate amounts (use bid price for execution) with u128 intermediates
             let match_price = bid.price;
-            let quote_amount = ((matched as u128) * (match_price as u128) / PRICE_SCALE) as u64;
-            
-            // Calculate and collect fee from taker (seller)
-            let fee_amount = (matched * book.fee_bps) / 10000; // fee in base tokens
-            
+            let matched_u128 = (matched as u128);
+            let price_u128 = (match_price as u128);
+            let trade_value_u128 = (matched_u128 * price_u128) / PRICE_SCALE;
+
+            // bounds check before casting
+            assert!(trade_value_u128 <= U64_MAX, E_INSUFFICIENT_LIQUIDITY);
+            let quote_amount = trade_value_u128 as u64;
+
+            // Fee calculated as percentage of trade value, collected in quote tokens
+            let fee_u128 = (trade_value_u128 * (book.fee_bps as u128)) / 10000u128;
+            assert!(fee_u128 <= U64_MAX, E_INVALID_FEE);
+            let fee_amount = fee_u128 as u64;
+
             // Update order
             bid.filled = bid.filled + matched;
             remaining = remaining - matched;
-            
-            // Transfer quote to taker (seller) - amount without fee
-            let quote_to_taker = balance::split(&mut book.quote_balance, quote_amount);
+
+            // Transfer quote to taker (seller) minus fee (fee is collected from the quote provided by maker)
+            let taker_receive = quote_amount - fee_amount;
+            let quote_to_taker = balance::split(&mut book.quote_balance, taker_receive);
             transfer::public_transfer(
                 coin::from_balance(quote_to_taker, ctx),
                 maker
             );
-            
+
             // Transfer base to maker (buyer)
             let base_to_maker = balance::split(&mut book.base_balance, matched);
             transfer::public_transfer(
                 coin::from_balance(base_to_maker, ctx),
                 bid.maker
             );
-            
-            // Collect fee in base tokens
-            let fee_collected = balance::split(&mut book.base_balance, fee_amount);
-            balance::join(&mut book.fee_balance_base, fee_collected);
+
+            // Collect fee in quote tokens from the maker's locked quote (fee comes from the quote_amount)
+            let fee_collected = balance::split(&mut book.quote_balance, fee_amount);
+            balance::join(&mut book.fee_balance_quote, fee_collected);
             
             event::emit(OrderMatched {
                 book_id: object::uid_to_address(&book.id),
@@ -335,7 +389,25 @@ public entry fun place_ask<Base, Quote>(
         };
         
         // Insert in sorted order (lowest price first)
-        let len = vector::length(&book.asks);
+        let mut len = vector::length(&book.asks);
+
+        // If side is full, remove worst ask (last element) and refund its unmatched locked base
+        if (len >= book.max_depth) {
+            let worst = vector::pop_back(&mut book.asks);
+            let unmatched = worst.quantity - worst.filled;
+            if (unmatched > 0) {
+                let refund_base = unmatched;
+                if (refund_base > 0) {
+                    let refund = balance::split(&mut book.base_balance, refund_base);
+                    transfer::public_transfer(
+                        coin::from_balance(refund, ctx),
+                        worst.maker
+                    );
+                };
+            };
+            len = len - 1;
+        };
+
         let mut insert_pos = len;
         let mut j = 0;
         while (j < len) {
@@ -346,7 +418,7 @@ public entry fun place_ask<Base, Quote>(
             };
             j = j + 1;
         };
-        
+
         if (insert_pos == len) {
             vector::push_back(&mut book.asks, new_order);
         } else {
@@ -480,6 +552,11 @@ public fun get_bid_count<Base, Quote>(book: &OrderBook<Base, Quote>): u64 {
 /// Get total number of open asks
 public fun get_ask_count<Base, Quote>(book: &OrderBook<Base, Quote>): u64 {
     vector::length(&book.asks)
+}
+
+/// Get maximum depth per side
+public fun get_max_depth<Base, Quote>(book: &OrderBook<Base, Quote>): u64 {
+    book.max_depth
 }
 
 /// Get order book depth (total liquidity)

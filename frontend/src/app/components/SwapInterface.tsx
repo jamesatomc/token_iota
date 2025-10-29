@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { useSignAndExecuteTransaction, useCurrentAccount, useIotaClient } from "@iota/dapp-kit";
 import { Transaction } from "@iota/iota-sdk/transactions";
-import { CONTRACTS, MODULES, DEX_FUNCTIONS, parseAmount } from "../lib/contracts";
+import { CONTRACTS, MODULES, DEX_FUNCTIONS, parseAmount, DEFAULT_TOKENS } from "../lib/contracts";
 import { usePools } from "../hooks/usePools";
 import TokenSelector from "./TokenSelector";
 import Card from "./UI/Card";
@@ -40,15 +40,18 @@ export default function SwapInterface() {
 
   // memoize token candidates to avoid recomputing on every render
   const tokenCandidates = useMemo(() => {
-    return pools
+    const fromPools = pools
       .flatMap((p) => [
         { type: p.tokenX, symbol: p.tokenXSymbol || p.tokenX },
         { type: p.tokenY, symbol: p.tokenYSymbol || p.tokenY },
-      ])
-      .reduce((acc: { type: string; symbol: string }[], t) => {
-        if (!acc.find((x) => x.type === t.type)) acc.push(t);
-        return acc;
-      }, [] as { type: string; symbol: string }[]);
+      ]);
+
+    const fromDefaults = DEFAULT_TOKENS.map((t) => ({ type: t.type, symbol: t.symbol }));
+
+    return [...fromDefaults, ...fromPools].reduce((acc: { type: string; symbol: string }[], t) => {
+      if (!acc.find((x) => x.type === t.type)) acc.push(t);
+      return acc;
+    }, [] as { type: string; symbol: string }[]);
   }, [pools]);
 
   // memoize selected pool object for quick access
