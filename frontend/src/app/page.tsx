@@ -19,7 +19,7 @@ export default function Home() {
     { key: "swap", label: "Swap" },
     { key: "liquidity", label: "Add" },
     { key: "mint", label: "Mint" },
-    { key: "pool", label: "Create Pair" },
+    { key: "pool", label: "Create Pool" },
     { key: "info", label: "Pool Info" },
   ];
 
