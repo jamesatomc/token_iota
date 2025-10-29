@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { useSignAndExecuteTransaction, useCurrentAccount, useIotaClient } from "@iota/dapp-kit";
 import { Transaction } from "@iota/iota-sdk/transactions";
 import { CONTRACTS, MODULES, DEX_FUNCTIONS, parseAmount } from "../lib/contracts";
@@ -33,32 +33,36 @@ export default function SwapInterface() {
   // Balances map for quick display
   const [balancesMap, setBalancesMap] = useState<Record<string, string>>({});
 
-  const tokenCandidates = pools
-    .flatMap((p) => [
-      { type: p.tokenX, symbol: p.tokenXSymbol || p.tokenX },
-      { type: p.tokenY, symbol: p.tokenYSymbol || p.tokenY },
-    ])
-    .reduce((acc: { type: string; symbol: string }[], t) => {
-      if (!acc.find((x) => x.type === t.type)) acc.push(t);
-      return acc;
-    }, [] as { type: string; symbol: string }[]);
+  // memoize token candidates to avoid recomputing on every render
+  const tokenCandidates = useMemo(() => {
+    return pools
+      .flatMap((p) => [
+        { type: p.tokenX, symbol: p.tokenXSymbol || p.tokenX },
+        { type: p.tokenY, symbol: p.tokenYSymbol || p.tokenY },
+      ])
+      .reduce((acc: { type: string; symbol: string }[], t) => {
+        if (!acc.find((x) => x.type === t.type)) acc.push(t);
+        return acc;
+      }, [] as { type: string; symbol: string }[]);
+  }, [pools]);
+
+  // memoize selected pool object for quick access
+  const selectedPoolObj = useMemo(() => pools.find((p) => p.poolId === poolId) ?? null, [pools, poolId]);
 
   // Fetch balances for chosen tokens when pool or account changes
   const fetchBalances = useCallback(async () => {
     if (!client || !currentAccount) return;
-    const map: Record<string, string> = { ...(balancesMap || {}) };
+    const map: Record<string, string> = {};
+
     const typesToFetch = new Set<string>();
     if (tokenFromType) typesToFetch.add(tokenFromType);
     if (tokenToType) typesToFetch.add(tokenToType);
-    // also fetch all candidate tokens for selector quick view
     tokenCandidates.forEach((t) => typesToFetch.add(t.type));
 
     await Promise.all(
       Array.from(typesToFetch).map(async (t) => {
         try {
           if (t === "0x2::iota::IOTA") {
-            // Try SDK getBalance first, but if it doesn't return a numeric total,
-            // fall back to summing coins (so we don't set 0 prematurely).
             try {
               const bal = await (client as unknown as { getBalance?: (opts: { owner: string }) => Promise<{ total?: number | string } | undefined> }).getBalance?.({ owner: currentAccount.address });
               if (bal && typeof bal === "object" && (typeof bal.total === "number" || typeof bal.total === "string")) {
@@ -68,7 +72,6 @@ export default function SwapInterface() {
             } catch {
               // ignore and fall back to coins
             }
-            // fall through to summing coins below
           }
 
           const resp = await client.getCoins({ owner: currentAccount.address, coinType: t });
@@ -78,14 +81,14 @@ export default function SwapInterface() {
           }, BigInt(0));
           map[t] = total.toString();
         } catch {
-          map[t] = map[t] || "0";
+          map[t] = "0";
         }
       })
     );
 
-    setBalancesMap(map);
-  }, [client, currentAccount, tokenFromType, tokenToType, /* tokenCandidates derived from pools */ balancesMap, tokenCandidates]);
-
+    // set once after building map
+    setBalancesMap((prev) => ({ ...prev, ...map }));
+  }, [client, currentAccount, tokenFromType, tokenToType, tokenCandidates]);
 
   const handleSwap = async () => {
     if (!currentAccount || !amountIn || !poolId) {
@@ -258,15 +261,14 @@ export default function SwapInterface() {
   // Effect: when pool selected, set token types
   useEffect(() => {
     if (!poolId) return;
-    const p = pools.find((x) => x.poolId === poolId);
+    const p = selectedPoolObj;
     if (!p) return;
     setTokenFromType(p.tokenX);
     setTokenFromSymbol(p.tokenXSymbol || (p.tokenX.split("::").pop() ?? null));
     setTokenToType(p.tokenY);
     setTokenToSymbol(p.tokenYSymbol || (p.tokenY.split("::").pop() ?? null));
-    // fetch balances for these tokens
     void fetchBalances();
-  }, [poolId, pools, fetchBalances]);
+  }, [poolId, selectedPoolObj, fetchBalances]);
 
   // Effect: refetch balances when account/client change
   useEffect(() => {
@@ -412,8 +414,8 @@ export default function SwapInterface() {
   return (
     // Outer wrapper prevents horizontal scrolling and ensures the component can fit the viewport
     <div className="w-full overflow-x-hidden">
-      {/* Card: full-width on small screens, capped on larger screens and centered */}
-      <div className="bg-white rounded-2xl shadow-sm p-6 w-full max-w-full sm:max-w-md mx-auto">
+      {/* Card: reserve vertical space to avoid layout shift when async data loads */}
+      <div className="bg-white rounded-2xl shadow-sm p-6 w-full max-w-full sm:max-w-md mx-auto min-h-[520px]">
         <h2 className="text-2xl font-bold mb-6 text-gray-900">Swap Tokens</h2>
 
         {/* Pool Selection */}
@@ -449,7 +451,7 @@ export default function SwapInterface() {
         </div>
 
         {/* From Token */}
-        <div className="bg-gray-50 rounded-xl p-4 mb-2 relative">
+        <div className="bg-gray-50 rounded-xl p-4 mb-2 relative h-32">
           <div className="flex justify-between mb-2">
             <span className="text-sm text-gray-600">From</span>
           </div>
@@ -511,7 +513,7 @@ export default function SwapInterface() {
         </div>
 
         {/* To Token */}
-        <div className="bg-gray-50 rounded-xl p-4 mb-4 relative">
+        <div className="bg-gray-50 rounded-xl p-4 mb-4 relative h-32">
           <div className="flex justify-between mb-2">
             <span className="text-sm text-gray-600">To</span>
           </div>

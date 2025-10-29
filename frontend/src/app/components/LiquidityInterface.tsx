@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import { useSignAndExecuteTransaction, useCurrentAccount, useIotaClient } from "@iota/dapp-kit";
 import { Transaction } from "@iota/iota-sdk/transactions";
 import { CONTRACTS, MODULES, DEX_FUNCTIONS, parseAmount } from "../lib/contracts";
@@ -49,22 +49,23 @@ export default function LiquidityInterface() {
   const { pools, loading: poolsLoading } = usePools();
   const [poolBalances, setPoolBalances] = useState<Record<string, string>>({});
 
+  // memoize selected pool object to avoid repeated finds
+  const selectedPoolObj = useMemo(() => pools.find((x) => x.poolId === selectedPool) ?? null, [pools, selectedPool]);
+
   // fetch balances for selected pool token types
   useEffect(() => {
     const fetch = async () => {
-      if (!client || !currentAccount || !selectedPool) {
+      if (!client || !currentAccount || !selectedPoolObj) {
         setPoolBalances({});
         return;
       }
-      const p = pools.find((x) => x.poolId === selectedPool);
-      if (!p) return;
+      const p = selectedPoolObj;
       const types = [p.tokenX, p.tokenY];
       const map: Record<string, string> = {};
       await Promise.all(types.map(async (t) => {
         try {
           if (t === "0x2::iota::IOTA") {
             try {
-              // avoid `any` by narrowing client for the optional getBalance method
               const c = client as unknown as IotaClientWithBalance;
               const bal = await c.getBalance?.({ owner: currentAccount.address });
               if (bal && typeof bal === 'object' && (typeof bal.total === 'number' || typeof bal.total === 'string')) {
@@ -85,16 +86,17 @@ export default function LiquidityInterface() {
       setPoolBalances(map);
     };
     void fetch();
-  }, [client, currentAccount, selectedPool, pools]);
+  }, [client, currentAccount, selectedPoolObj, pools]);
 
-  const formatPoolBalance = (t?: string | null) => {
+  // helper that uses memoized selectedPoolObj
+  const formatPoolBalance = useCallback((t?: string | null) => {
     if (!t) return '0';
     const raw = poolBalances[t];
     if (!raw) return '0';
     const human = Number(raw) / 1e9;
     if (t === '0x2::iota::IOTA') return Math.floor(human).toLocaleString(undefined, { maximumFractionDigits: 0 });
     return human.toLocaleString(undefined, { maximumFractionDigits: 6 });
-  };
+  }, [poolBalances]);
 
   const getPoolHumanBalance = (t?: string | null) => {
     if (!t) return 0;
@@ -448,7 +450,7 @@ export default function LiquidityInterface() {
   // (estimation debounce removed - state was unused)
 
   return (
-    <div className="bg-white rounded-2xl shadow-lg p-6 max-w-md w-full">
+    <div className="bg-white rounded-2xl shadow-lg p-6 max-w-md w-full min-h-[560px]">
       <div className="flex mb-6 bg-gray-100 rounded-lg p-1">
         <button
           onClick={() => setTab("add")}
@@ -708,4 +710,3 @@ export default function LiquidityInterface() {
     </div>
   );
 }
-            
