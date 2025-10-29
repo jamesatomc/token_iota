@@ -1,13 +1,16 @@
 // Contract addresses and configuration
 export const CONTRACTS = {
   // Replace with your deployed package ID
-  PACKAGE_ID: "0xaedb81c889c55fdc1279979838cd80917e5d4579148e4844dbc04215bf01bdfb",
+  PACKAGE_ID: "0x1b0fae0170d4d81cb152ad4984ef214293a37cc6fafbc519ec80dcab359c2e83",
+  
+  // Global Pool Registry ID (create once with create_registry function)
+  REGISTRY_ID: "0x4c928d5517b756d211b8cfc000dc3dcff8c3023b925547122174f69b2b67ae3d", // Paste your GlobalPoolRegistry object ID here after calling create_registry
   
   // KANARI Token
   KANARI: {
-    TREASURY_CAP: "0x9ac8e54cd1f3cbe6310b9f5eff20a5ce08d261f232c08e62f83755134dde1ea4",
-    METADATA: "0xad79e99b4e294f202b8977aa9b300075405d3648cfde87f1b69f250e83f35efb",
-    TYPE: "0xaedb81c889c55fdc1279979838cd80917e5d4579148e4844dbc04215bf01bdfb::kanari::KANARI",
+    TREASURY_CAP: "0x595dcaa65c269e1103603823b1e6c47f5f6bae8d3ccdc759a08372eca1057121",
+    METADATA: "0xfeeb38436caaa4256242d3da57d481971026cea68e3c8f04ff6d19ff945a256d",
+    TYPE: "0x1b0fae0170d4d81cb152ad4984ef214293a37cc6fafbc519ec80dcab359c2e83::kanari::KANARI",
   },
   
   // IOTA Token
@@ -32,6 +35,7 @@ export const MODULES = {
 
 // Function names for DEX
 export const DEX_FUNCTIONS = {
+  CREATE_REGISTRY: "create_registry",
   CREATE_POOL: "create_pool",
   ADD_LIQUIDITY: "add_liquidity",
   REMOVE_LIQUIDITY: "remove_liquidity",
@@ -41,6 +45,8 @@ export const DEX_FUNCTIONS = {
   GET_LP_SUPPLY: "get_lp_supply",
   GET_FEE: "get_fee",
   GET_AMOUNT_OUT: "get_amount_out",
+  POOL_EXISTS: "pool_exists",
+  GET_POOL_ADDRESS: "get_pool_address",
 };
 
 // Function names for DeepBook

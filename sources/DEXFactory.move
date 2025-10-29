@@ -2,12 +2,21 @@
 module kanari_network::DEXFactory;
 
 use iota::coin;
-use kanari_network::DEX::{Self, LiquidityPool, LPToken};
+use kanari_network::DEX::{Self, LiquidityPool, LPToken, GlobalPoolRegistry};
+
+/// Create global pool registry (must be called once before creating any pools)
+public entry fun create_registry(ctx: &mut TxContext) {
+    DEX::create_global_registry(ctx);
+}
 
 /// Create a new liquidity pool with specified fee
 /// This is the main entry point from UI
-public entry fun create_pool<X, Y>(fee_bps: u64, ctx: &mut TxContext) {
-    DEX::create_pool<X, Y>(fee_bps, ctx);
+public entry fun create_pool<X, Y>(
+    registry: &mut GlobalPoolRegistry,
+    fee_bps: u64,
+    ctx: &mut TxContext
+) {
+    DEX::create_pool<X, Y>(registry, fee_bps, ctx);
 }
 
 /// Add liquidity to an existing pool

@@ -3,6 +3,9 @@ module kanari_network::DEX;
 use iota::balance::{Self, Balance};
 use iota::coin::{Self, Coin};
 use iota::event;
+use iota::table::{Self, Table};
+use std::type_name;
+use iota::hash;
 
 // Error codes
 const E_INSUFFICIENT_LIQUIDITY: u64 = 1;
@@ -13,6 +16,7 @@ const E_SLIPPAGE_EXCEEDED: u64 = 5;
 const E_INVALID_POOL_STATE: u64 = 6;
 const E_MIN_LIQUIDITY: u64 = 7;
 const E_OVERFLOW: u64 = 8;
+const E_POOL_ALREADY_EXISTS: u64 = 9;
 
 // Fee constants (basis points)
 const FEE_LOW: u64 = 10; // 0.1%
@@ -38,15 +42,23 @@ public struct LiquidityPool<phantom X, phantom Y> has key {
     lp_supply: u64,
 }
 
-/// Pool registry
-public struct PoolRegistry<phantom X, phantom Y> has key {
+/// Global pool registry to prevent duplicate pools
+public struct GlobalPoolRegistry has key {
     id: UID,
+    // Maps type-pair hash (blake2b256 of concatenated type names) to pool address
+    pools: Table<vector<u8>, address>,
 }
 
 // Events
 public struct PoolCreated has copy, drop {
     pool_id: address,
     fee_bps: u64,
+    type_x: vector<u8>,
+    type_y: vector<u8>,
+}
+
+public struct RegistryCreated has copy, drop {
+    registry_id: address,
 }
 
 public struct LiquidityAdded has copy, drop {
@@ -70,9 +82,39 @@ public struct Swap has copy, drop {
     is_x_to_y: bool,
 }
 
+// Create global pool registry (call once during deployment)
+public fun create_global_registry(ctx: &mut TxContext) {
+    let registry = GlobalPoolRegistry {
+        id: object::new(ctx),
+        pools: table::new(ctx),
+    };
+    
+    let registry_id = object::uid_to_address(&registry.id);
+    
+    event::emit(RegistryCreated {
+        registry_id,
+    });
+    
+    transfer::share_object(registry);
+}
+
 // Create a new liquidity pool
-public fun create_pool<X, Y>(fee_bps: u64, ctx: &mut TxContext) {
+public fun create_pool<X, Y>(
+    registry: &mut GlobalPoolRegistry,
+    fee_bps: u64,
+    ctx: &mut TxContext
+) {
     assert!(fee_bps == FEE_LOW || fee_bps == FEE_MED || fee_bps == FEE_HIGH, E_INVALID_FEE);
+
+    // Compute deterministic hash for this type pair
+    let ty_x = type_name::get_with_original_ids<X>().into_string().into_bytes();
+    let ty_y = type_name::get_with_original_ids<Y>().into_string().into_bytes();
+    let mut concat = ty_x;
+    std::vector::append(&mut concat, ty_y);
+    let pair_hash = hash::blake2b256(&concat);
+
+    // Check if pool already exists for this pair
+    assert!(!table::contains(&registry.pools, pair_hash), E_POOL_ALREADY_EXISTS);
 
     let pool = LiquidityPool<X, Y> {
         id: object::new(ctx),
@@ -84,18 +126,17 @@ public fun create_pool<X, Y>(fee_bps: u64, ctx: &mut TxContext) {
 
     let pool_id = object::uid_to_address(&pool.id);
 
-    // Create registry (simplified, no treasury cap)
-    let registry = PoolRegistry<X, Y> {
-        id: object::new(ctx),
-    };
+    // Register this pool in the global registry
+    table::add(&mut registry.pools, pair_hash, pool_id);
 
     event::emit(PoolCreated {
         pool_id,
         fee_bps,
+        type_x: type_name::get_with_original_ids<X>().into_string().into_bytes(),
+        type_y: type_name::get_with_original_ids<Y>().into_string().into_bytes(),
     });
 
     transfer::share_object(pool);
-    transfer::share_object(registry);
 }
 
 // Safe multiplication with overflow check using u128
@@ -413,6 +454,32 @@ public fun swap_y_to_x<X, Y>(
 }
 
 // ========== View Functions ==========
+
+/// Check if a pool exists for the given type pair
+public fun pool_exists<X, Y>(registry: &GlobalPoolRegistry): bool {
+    let ty_x = type_name::get_with_original_ids<X>().into_string().into_bytes();
+    let ty_y = type_name::get_with_original_ids<Y>().into_string().into_bytes();
+    let mut concat = ty_x;
+    std::vector::append(&mut concat, ty_y);
+    let pair_hash = hash::blake2b256(&concat);
+    
+    table::contains(&registry.pools, pair_hash)
+}
+
+/// Get pool address for a given type pair (returns None if not exists)
+public fun get_pool_address<X, Y>(registry: &GlobalPoolRegistry): Option<address> {
+    let ty_x = type_name::get_with_original_ids<X>().into_string().into_bytes();
+    let ty_y = type_name::get_with_original_ids<Y>().into_string().into_bytes();
+    let mut concat = ty_x;
+    std::vector::append(&mut concat, ty_y);
+    let pair_hash = hash::blake2b256(&concat);
+    
+    if (table::contains(&registry.pools, pair_hash)) {
+        option::some(*table::borrow(&registry.pools, pair_hash))
+    } else {
+        option::none()
+    }
+}
 
 /// Get pool reserves
 public fun get_reserves<X, Y>(pool: &LiquidityPool<X, Y>): (u64, u64) {

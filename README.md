@@ -1,145 +1,259 @@
-Short guide — token/kanari
-=========================
+Short guide — Kanari Network DEX
+=================================
 
-This repository contains the `token::kanari` Move module. The README below shows how to build, publish and call the module using the `iota` CLI (PowerShell examples).
+This repository contains the Kanari Network DEX (Decentralized Exchange) with the following modules:
 
-Overview
---------
+- `kanari` - KANARI token implementation
+- `DEX` - Core AMM (Automated Market Maker) liquidity pool logic
+- `DEXFactory` - Entry point functions for creating and managing pools
 
-The `token::kanari` module provides basic functionality for the KANARI token:
+## Features
 
-- Creates the token and returns a `TreasuryCap` during `init`.
-- `mint(treasury_cap, amount, recipient)` — mint new KANARI coins using the treasury cap.
-- `transfer(token, amount, recipient)` — transfer KANARI coins.
-- `balance(coin)` — read the balance of a KANARI coin.
+### Token (kanari module)
 
-Prerequisites
+- Creates KANARI token with `TreasuryCap` during `init`
+- `mint(treasury_cap, amount, recipient)` — mint new KANARI coins
+- Standard coin operations (transfer, balance, etc.)
 
-Short guide — token/kanari
+### DEX (Core AMM)
 
-=========================
+- **Duplicate Pool Prevention** — Uses GlobalPoolRegistry to prevent creating duplicate pools for the same token pair
+- Constant product AMM (x * y = k) with three fee tiers
+- Slippage protection on all operations
+- LP token receipts for liquidity providers
+- Overflow-safe math with u128
+- Minimum liquidity lock to prevent attacks
 
-This repository contains the `token::kanari` Move module. The README below shows how to build, publish and call the module using the `iota` CLI (PowerShell examples).
+### Fee Tiers
 
-Overview
-
---------
-
-The `token::kanari` module provides basic functionality for the KANARI token:
-
-- Creates the token and returns a `TreasuryCap` during `init`.
-- `mint(treasury_cap, amount, recipient)` — mint new KANARI coins using the treasury cap.
-- `transfer(token, amount, recipient)` — transfer KANARI coins.
-- `balance(coin)` — read the balance of a KANARI coin.
+- Low: 0.1% (10 bps) - Best for stablecoin pairs
+- Medium: 0.5% (50 bps) - Best for most pairs  
+- High: 1.0% (100 bps) - Best for exotic pairs
 
 Prerequisites
 -------------
 
-- Installed `iota` CLI and access to a keystore/private key used for signing.
-- The signing address must have an IOTA native coin to pay transaction gas (or you must supply a gas object id with `--gas`).
+- Installed `iota` CLI with keystore/private key for signing
+- Signing address must have IOTA coins for gas fees
+- Node.js/Bun for frontend development
 
-Build and publish
+Build and Publish
 -----------------
 
-Run these commands inside the project directory (PowerShell):
+### Build Move modules
 
 ```powershell
 iota move build --skip-fetch-latest-git-deps
+```
+
+### Publish to network
+
+```powershell
 iota client publish --skip-fetch-latest-git-deps
 ```
 
-Call `mint`
+Save the Package ID from the publish output for use in the frontend.
+
+DEX Setup
+---------
+
+### 1. Create Global Registry (One-time setup)
+
+Before creating any pools, you must create the GlobalPoolRegistry:
+
+```powershell
+iota client call --package <PACKAGE_ID> --module DEXFactory --function create_registry
+```
+
+**Important:** Save the `GlobalPoolRegistry` object ID from the transaction output. You'll need to add it to your frontend configuration.
+
+### 2. Configure Frontend
+
+Edit `frontend/src/app/lib/contracts.ts`:
+
+```typescript
+export const CONTRACTS = {
+  PACKAGE_ID: "0x...", // Your deployed package ID
+  REGISTRY_ID: "0x...", // GlobalPoolRegistry object ID from step 1
+  
+  KANARI: {
+    TREASURY_CAP: "0x...",
+    METADATA: "0x...",
+    TYPE: "0x...::kanari::KANARI",
+  },
+  
+  IOTA: {
+    TYPE: "0x2::iota::IOTA",
+  },
+  // ...
+};
+```
+
+### 3. Create a Pool
+
+```powershell
+# Create KANARI/IOTA pool with 0.5% fee
+iota client call \
+  --package <PACKAGE_ID> \
+  --module DEXFactory \
+  --function create_pool \
+  --type-args <PACKAGE_ID>::kanari::KANARI 0x2::iota::IOTA \
+  --args <REGISTRY_ID> 50
+```
+
+**Note:** If you try to create a duplicate pool for the same token pair, the transaction will abort with error code 9 (`E_POOL_ALREADY_EXISTS`).
+
+### 4. Add Liquidity
+
+```powershell
+iota client call \
+  --package <PACKAGE_ID> \
+  --module DEXFactory \
+  --function add_liquidity \
+  --type-args <TOKEN_X_TYPE> <TOKEN_Y_TYPE> \
+  --args <POOL_ID> <COIN_X_ID> <COIN_Y_ID> 0
+```
+
+### 5. Swap Tokens
+
+```powershell
+# Swap X for Y
+iota client call \
+  --package <PACKAGE_ID> \
+  --module DEXFactory \
+  --function swap_x_to_y \
+  --type-args <TOKEN_X_TYPE> <TOKEN_Y_TYPE> \
+  --args <POOL_ID> <COIN_X_ID> 0
+```
+
+Mint KANARI Tokens
+------------------
+
+```powershell
+iota client call \
+  --package <PACKAGE_ID> \
+  --module kanari \
+  --function mint \
+  --args <TREASURY_CAP_ID> 1000000000 <RECIPIENT_ADDRESS>
+```
+
+Frontend Development
+-------------------
+
+### Install dependencies
+
+```powershell
+cd frontend
+bun install
+```
+
+### Run development server
+
+```powershell
+bun run dev
+```
+
+### Build for production
+
+```powershell
+bun run build
+```
+
+Architecture
 -----------
 
-Move signature:
+### GlobalPoolRegistry
 
-```text
-public fun mint(
-  treasury_cap: &mut TreasuryCap<KANARI>,
-  amount: u64,
-  recipient: address,
-  ctx: &mut TxContext,
-)
+- Singleton shared object that tracks all pools
+- Maps `blake2b256(type_name<X> || type_name<Y>)` → pool address
+- Prevents duplicate pools via table lookup before creation
+
+### LiquidityPool<X, Y>
+
+- Holds reserves of both tokens
+- Tracks LP supply and fee tier
+- Implements constant product formula with fees
+
+### LPToken<X, Y>
+
+- Receipt proving liquidity ownership
+- Burned when removing liquidity
+- Amount represents share of pool
+
+View Functions
+-------------
+
+```move
+// Check if pool exists for token pair
+public fun pool_exists<X, Y>(registry: &GlobalPoolRegistry): bool
+
+// Get pool address (returns Option<address>)
+public fun get_pool_address<X, Y>(registry: &GlobalPoolRegistry): Option<address>
+
+// Get pool reserves
+public fun get_reserves<X, Y>(pool: &LiquidityPool<X, Y>): (u64, u64)
+
+// Calculate swap output
+public fun get_amount_out<X, Y>(pool: &LiquidityPool<X, Y>, amount_in: u64, is_x_to_y: bool): u64
 ```
 
-You must pass three runtime args (TxContext is implicit):
+Error Codes
+----------
 
-1. TreasuryCap object id (e.g. `0x...`)
-2. Amount (u64)
-3. Recipient address (e.g. `0x...`)
-
-Examples (replace placeholders):
-
-```powershell
-# Default (CLI will auto-select gas coin if available)
-iota client call --package 0xf56ba6ae7dd999566d7f303df4cec6020d4e0880eb6b923a4f4b0ba9cc918fc8 --module kanari --function mint --args 0xTREASURY_OBJECT_ID 1000000000 0xRECIPIENT_ADDRESS
-
-# Explicit gas object (if signer has no suitable native coin)
-iota client call --package 0xf56ba6ae7dd999566d7f303df4cec6020d4e0880eb6b923a4f4b0ba9cc918fc8 --module kanari --function mint --args 0xTREASURY_OBJECT_ID 1000000000 0xRECIPIENT_ADDRESS --gas-budget 1000000
-
-# Specify sender address (must have private key in keystore)
-iota client call --package <pkg> --module kanari --function mint --args 0xTREASURY_OBJECT_ID 1000000000 0xRECIPIENT_ADDRESS --sender 0xSENDER_ADDRESS
-```
-
-Finding the `TreasuryCap<KANARI>` and gas coin
---------------------------------------------
-
-The `TreasuryCap` resource is created by `coin::create_currency` inside `init` and is transferred to the account that executed `init` (the creator). To find it, list objects for the creator account and look for a Move object with a type like `TreasuryCap<token::KANARI>`.
-
-Example:
-
-```powershell
-iota client objects --owner 0xCREATOR_ADDRESS --json
-```
-
-Pick the object id of the `TreasuryCap<token::KANARI>` as the first argument to `mint`.
-
-For gas, pick a native coin object owned by the signer and supply its id with `--gas` if the CLI does not select one automatically.
+- `E_INSUFFICIENT_LIQUIDITY: 1` - Pool has no liquidity
+- `E_INVALID_FEE: 2` - Fee not in allowed tiers (10, 50, or 100)
+- `E_ZERO_AMOUNT: 3` - Cannot trade/add zero amount
+- `E_INSUFFICIENT_LP_TOKENS: 4` - Not enough LP tokens to burn
+- `E_SLIPPAGE_EXCEEDED: 5` - Output less than minimum requested
+- `E_INVALID_POOL_STATE: 6` - Pool state inconsistent
+- `E_MIN_LIQUIDITY: 7` - Initial LP too small
+- `E_OVERFLOW: 8` - Integer overflow detected
+- `E_POOL_ALREADY_EXISTS: 9` - **Pool already exists for this token pair**
 
 Troubleshooting
----------------
+--------------
 
-- "Expected N args, found 0": You omitted required positional args. Provide treasury id, amount and recipient.
-- Gas errors: Fund the signing address with a native coin or provide `--gas-budget 1000000`.
-- Wrong object type: Ensure the first arg is a `TreasuryCap<KANARI>` object, not metadata or a coin object.
+### Pool Creation Fails with "E_POOL_ALREADY_EXISTS"
 
-If you'd like, paste the output of `iota client objects --owner 0xYOUR_ADDRESS --json` and I will point out which object to use as treasury and which coin to use as gas.
+A pool for this token pair already exists. Use the existing pool instead of creating a new one.
 
-3.Recipient address (e.g. `0x...`)
+### "Registry ID not configured"
 
-Examples (replace placeholders):
+Make sure `CONTRACTS.REGISTRY_ID` is set in `contracts.ts` with the GlobalPoolRegistry object ID.
 
-```powershell
-# Default (CLI will auto-select gas coin if available)
-iota client call --package 0xf56ba6ae7dd999566d7f303df4cec6020d4e0880eb6b923a4f4b0ba9cc918fc8 --module kanari --function mint --args 0xTREASURY_OBJECT_ID 1000000000 0xRECIPIENT_ADDRESS
+### Gas Errors
 
-# Explicit gas object (if signer has no suitable native coin)
-iota client call --package 0xf56ba6ae7dd999566d7f303df4cec6020d4e0880eb6b923a4f4b0ba9cc918fc8 --module kanari --function mint --args 0xTREASURY_OBJECT_ID 1000000000 0xRECIPIENT_ADDRESS --gas-budget 1000000
+Fund the signing address with IOTA coins or increase `--gas-budget`.
 
-# Specify sender address (must have private key in keystore)
-iota client call --package <pkg> --module kanari --function mint --args 0xTREASURY_OBJECT_ID 1000000000 0xRECIPIENT_ADDRESS --sender 0xSENDER_ADDRESS
-```
+### Frontend Not Connecting
 
-Finding the `TreasuryCap<KANARI>` and gas coin
---------------------------------------------
+1. Check that wallet extension is installed and unlocked
+2. Verify `PACKAGE_ID` and `REGISTRY_ID` in `contracts.ts`
+3. Ensure you're on the correct network (mainnet/testnet)
 
-The `TreasuryCap` resource is created by `coin::create_currency` inside `init` and is transferred to the account that executed `init` (the creator). To find it, list objects for the creator account and look for a Move object with a type like `TreasuryCap<token::KANARI>`.
+Finding Object IDs
+-----------------
 
-Example:
+List all objects owned by an address:
 
 ```powershell
-iota client objects --owner 0xCREATOR_ADDRESS --json
+iota client objects --owner <ADDRESS> --json
 ```
 
-Pick the object id of the `TreasuryCap<token::KANARI>` as the first argument to `mint`.
+Look for:
 
-For gas, pick a native coin object owned by the signer and supply its id with `--gas` if the CLI does not select one automatically.
+- `TreasuryCap<...::kanari::KANARI>` - For minting KANARI
+- `GlobalPoolRegistry` - For creating pools
+- `LiquidityPool<X, Y>` - For pool operations
+- `Coin<...>` - For trading/liquidity
 
-Troubleshooting
----------------
+Documentation
+------------
 
-- "Expected N args, found 0": You omitted required positional args. Provide treasury id, amount and recipient.
-- Gas errors: Fund the signing address with a native coin or provide `--gas-budget 1000000`.
-- Wrong object type: Ensure the first arg is a `TreasuryCap<KANARI>` object, not metadata or a coin object.
+See additional documentation:
 
-If you'd like, paste the output of `iota client objects --owner 0xYOUR_ADDRESS --json` and I will point out which object to use as treasury and which coin to use as gas.
+- `DEEPBOOK_UI_GUIDE.md` - Frontend UI guide
+- `DEEPBOOK_IMPROVEMENTS.md` - DEX architecture details
+- `README_DEX.md` - Detailed DEX technical documentation
+
+For more help, check the transaction output or provide the error message.

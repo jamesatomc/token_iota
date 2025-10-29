@@ -70,6 +70,12 @@ export default function CreatePool() {
       return;
     }
 
+    // Check if REGISTRY_ID is configured
+    if (!CONTRACTS.REGISTRY_ID || !CONTRACTS.REGISTRY_ID.trim()) {
+      alert("Registry ID not configured. Please set CONTRACTS.REGISTRY_ID in contracts.ts");
+      return;
+    }
+
     // Resolve selected token types
     const finalTokenX = tokenXType?.trim();
     const finalTokenY = tokenYType?.trim();
@@ -100,6 +106,7 @@ export default function CreatePool() {
       tx.moveCall({
         target: `${CONTRACTS.PACKAGE_ID}::${MODULES.DEX_FACTORY}::${DEX_FUNCTIONS.CREATE_POOL}`,
         arguments: [
+          tx.object(CONTRACTS.REGISTRY_ID),
           tx.pure.u64(feeBps),
         ],
         typeArguments: [finalTokenX, finalTokenY],
@@ -112,11 +119,17 @@ export default function CreatePool() {
         {
           onSuccess: (result) => {
             console.log("Pool created successfully:", result);
-            alert(`Pool created successfully! Digest: ${result.digest}\n\nPlease check the transaction to get Pool ID and Registry ID from created objects.`);
+            alert(`Pool created successfully! Digest: ${result.digest}\n\nPlease check the transaction to get Pool ID from created objects.`);
           },
           onError: (error) => {
             console.error("Pool creation failed:", error);
-            alert(`Failed to create pool: ${error.message}`);
+            const errorMsg = error.message || String(error);
+            // Check for duplicate pool error (E_POOL_ALREADY_EXISTS = 9)
+            if (errorMsg.includes("E_POOL_ALREADY_EXISTS") || errorMsg.includes("Aborted with code 9")) {
+              alert(`Pool already exists for this token pair!\n\nA pool with these tokens has already been created. Please use the existing pool.`);
+            } else {
+              alert(`Failed to create pool: ${errorMsg}`);
+            }
           },
         }
       );
@@ -137,19 +150,21 @@ export default function CreatePool() {
           Create a new liquidity pool for any token pair
         </p>
 
-        <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 mb-4">
-          <div className="flex items-start gap-2">
-            <svg className="w-5 h-5 text-blue-500 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
-              <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
-            </svg>
-            <div>
-              <p className="text-sm font-medium text-blue-900">Note</p>
-              <p className="text-sm text-blue-800 mt-1">
-                The pool will automatically appear in the Swap and Liquidity interfaces after creation.
-              </p>
+        {!CONTRACTS.REGISTRY_ID && (
+          <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-4">
+            <div className="flex items-start gap-2">
+              <svg className="w-5 h-5 text-yellow-600 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+                <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+              </svg>
+              <div>
+                <p className="text-sm font-medium text-yellow-900">Registry ID Not Set</p>
+                <p className="text-sm text-yellow-800 mt-1">
+                  Please set <code className="bg-yellow-100 px-1 rounded font-mono text-xs">CONTRACTS.REGISTRY_ID</code> in <code className="bg-yellow-100 px-1 rounded">contracts.ts</code> before creating pools.
+                </p>
+              </div>
             </div>
           </div>
-        </div>
+        )}
       </div>
 
       {/* Token X Selection (opens TokenSelector) */}
@@ -297,10 +312,10 @@ export default function CreatePool() {
 
       <button
         onClick={handleCreatePool}
-        disabled={loading || !currentAccount}
+        disabled={loading || !currentAccount || !CONTRACTS.REGISTRY_ID}
         className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-gray-200 text-white font-semibold py-4 rounded-xl transition-colors disabled:cursor-not-allowed"
       >
-        {loading ? "Creating Pool..." : !currentAccount ? "Connect Wallet" : "Create Pool"}
+        {loading ? "Creating Pool..." : !currentAccount ? "Connect Wallet" : !CONTRACTS.REGISTRY_ID ? "Set Registry ID in contracts.ts" : "Create Pool"}
       </button>
       <div className="mt-3 text-center">
         <button

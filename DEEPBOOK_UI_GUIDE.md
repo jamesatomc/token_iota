@@ -1,14 +1,17 @@
 # DeepBook UI Integration Guide
 
 ## Overview
+
 Created a complete trading interface for the DeepBook Central Limit Order Book (CLOB) system on IOTA.
 
 ## What Was Created
 
 ### 1. **DeepBookInterface.tsx** (`frontend/src/app/components/DeepBookInterface.tsx`)
+
 A comprehensive trading interface component with:
 
-#### Features:
+#### Features
+
 - **Order Book Creation**: Initialize new KANARI/IOTA order books
 - **Buy/Sell Orders**: Place bid (buy) and ask (sell) limit orders
 - **Price Calculation**: Automatic total calculation based on price × quantity
@@ -16,7 +19,8 @@ A comprehensive trading interface component with:
 - **Order Book Visualization**: Displays bids and asks (ready for live data integration)
 - **Normalized Pricing**: Uses `PRICE_SCALE = 1_000_000_000` to match smart contract
 
-#### Key Functions:
+#### Key Functions
+
 ```typescript
 handleCreateBook()      // Create new order book with 0.3% fee
 handlePlaceBid()        // Place buy order (requires IOTA payment)
@@ -25,20 +29,22 @@ calculateNormalizedPrice() // Convert human-readable price to contract format
 ```
 
 ### 2. **Page Integration** (`frontend/src/app/page.tsx`)
+
 - Added new "Order Book" tab in navigation
 - Integrated DeepBookInterface component
 - Styled with purple accent to differentiate from other tabs
 
 ### 3. **TypeScript Configuration** (`frontend/tsconfig.json`)
+
 - Updated target from ES2017 to ES2020 to support BigInt literals
 
 ## How to Use
 
-### For Users:
+### For Users
 
 1. **Connect Wallet**: Click "Connect Button" in header
 2. **Navigate to Order Book Tab**: Click purple "Order Book" button
-3. **Enter Order Book Address**: 
+3. **Enter Order Book Address**:
    - If order book exists, paste its address
    - If creating new, leave empty and click "Create New Book"
 4. **Place Orders**:
@@ -48,9 +54,9 @@ calculateNormalizedPrice() // Convert human-readable price to contract format
    - Review total amount
    - Click "Place Buy/Sell Order"
 
-### For Developers:
+### For Developers
 
-#### Smart Contract Integration Points:
+#### Smart Contract Integration Points
 
 ```typescript
 // Create Order Book
@@ -79,7 +85,8 @@ ${PACKAGE_ID}::DeepBook::cancel_order<Base, Quote>(
 )
 ```
 
-#### Price Normalization:
+#### Price Normalization
+
 ```typescript
 // Formula: normalized_price = (quote_amount * PRICE_SCALE) / base_amount
 // Example: 1 KANARI = 0.5 IOTA
@@ -89,12 +96,15 @@ ${PACKAGE_ID}::DeepBook::cancel_order<Base, Quote>(
 ## Next Steps for Full Functionality
 
 ### 1. **Query Order Book State**
+
 Currently the UI shows mock data. You need to:
+
 - Fetch actual order book state from blockchain
 - Display real bids and asks
 - Show user's open orders
 
-#### Suggested Implementation:
+#### Suggested Implementation
+
 ```typescript
 // In contracts.ts, add:
 export const DEEPBOOK_FUNCTIONS = {
@@ -113,20 +123,25 @@ const { data: orderBookData } = useIotaClientQuery(
 ```
 
 ### 2. **User Order Management**
+
 Add ability to:
+
 - View user's open orders
 - Cancel orders with one click
 - Track order history
 - Display filled/partial fills
 
 ### 3. **Real-Time Updates**
+
 Implement WebSocket or polling for:
+
 - Live order book updates
 - Recent trades
 - Price charts
 - Market depth visualization
 
 ### 4. **Enhanced UI Features**
+
 - Order book depth chart (visual representation)
 - Price chart with candlesticks
 - Trade history table
@@ -134,14 +149,17 @@ Implement WebSocket or polling for:
 - Keyboard shortcuts for traders
 
 ### 5. **Token Selection**
+
 Currently hardcoded to KANARI/IOTA. Add:
+
 - Token selector for different pairs
 - Multi-market support
 - Popular pairs sidebar
 
 ## Technical Notes
 
-### Price Scale Explanation:
+### Price Scale Explanation
+
 The smart contract uses a normalized price system to handle tokens with different decimals:
 
 ```
@@ -155,12 +173,14 @@ Example:
 - Stored in contract as: 500000000
 ```
 
-### Fee Structure:
+### Fee Structure
+
 - Default fee: 0.3% (30 basis points)
 - Taker pays fees (market orders that match immediately)
 - Maker orders (resting in book) don't pay fees until matched
 
-### Order Matching:
+### Order Matching
+
 1. New order attempts immediate matching
 2. Best price orders matched first
 3. Partial fills supported
@@ -183,20 +203,26 @@ Example:
 ## Common Issues & Solutions
 
 ### Issue: "Failed to place order"
+
 **Solution**: Ensure you have:
+
 - Sufficient IOTA for buy orders (price × quantity)
 - Sufficient KANARI for sell orders
 - Order book address is correct
 - Wallet is connected
 
 ### Issue: "Invalid price"
-**Solution**: 
+
+**Solution**:
+
 - Price must be positive
 - Use reasonable decimals (max 9)
 - Check market prices first
 
 ### Issue: "Transaction failed"
+
 **Solution**:
+
 - Check gas fees
 - Verify token approvals
 - Ensure order book object is shared

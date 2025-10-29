@@ -2,7 +2,7 @@
 
 ## ✅ Status: PRODUCTION READY
 
-**Version:** 2.1 Final  
+**Version:** 3.0 Final  
 **Build Status:** ✅ Success  
 **Security Level:** 🔐 High  
 **Code Quality:** ⭐⭐⭐⭐⭐
@@ -12,6 +12,7 @@
 ## 📋 All Critical Issues Fixed
 
 ### ✅ Round 1: Major Bugs (Fixed)
+
 - [x] Incorrect LP minting logic (now uses sqrt)
 - [x] Reserve calculation after join (now before join)
 - [x] Non-fungible LP tokens (now Coin<LP>)
@@ -20,8 +21,15 @@
 - [x] No view functions (now complete)
 
 ### ✅ Round 2: Final Critical Fixes (Fixed)
+
 - [x] Integer overflow in `sqrt(amount_x * amount_y)`
 - [x] Incorrect `lp_supply` accounting (not including burned LP)
+
+### ✅ Round 3: Duplicate Pool Prevention (Fixed)
+
+- [x] **Duplicate pool prevention** - GlobalPoolRegistry with Table-based tracking
+- [x] **Type-safe pool lookup** - Hash-based deterministic pool identification
+- [x] **E_POOL_ALREADY_EXISTS** error - Clear error when attempting duplicate creation
 
 ---
 
@@ -31,10 +39,11 @@
 |---------|--------|----------------|
 | **Overflow Protection** | ✅ | `safe_mul()` with bound checks |
 | **LP Inflation Attack** | ✅ | `min(lp_x, lp_y)` logic |
-| **Price Manipulation** | ✅ | MINIMUM_LIQUIDITY lock (1000 LP) |
+| **Price Manipulation** | ✅ | MINIMUM_LIQUIDITY lock (10 LP) |
 | **Front-running** | ✅ | Slippage parameters on all functions |
 | **Correct Accounting** | ✅ | Proper `lp_supply` tracking |
 | **Division by Zero** | ✅ | MINIMUM_LIQUIDITY > 0 guaranteed |
+| **Duplicate Pools** | ✅ | GlobalPoolRegistry prevents same pair |
 
 ---
 
@@ -45,51 +54,122 @@
 ```
 DEX Module
 ├── Structs
-│   ├── LP<X, Y>              (Witness for LP coin)
-│   ├── LiquidityPool<X, Y>   (Pool state)
-│   └── PoolRegistry<X, Y>    (Treasury cap holder)
+│   ├── LPToken<X, Y>            (LP receipt token)
+│   ├── LiquidityPool<X, Y>      (Pool state)
+│   └── GlobalPoolRegistry       (Singleton registry with Table)
 │
 ├── Public Functions
-│   ├── create_pool()         (Initialize pool)
-│   ├── add_liquidity()       (Deposit & mint LP)
-│   ├── remove_liquidity()    (Burn LP & withdraw)
-│   ├── swap_x_to_y()         (Trade X for Y)
-│   ├── swap_y_to_x()         (Trade Y for X)
-│   ├── get_reserves()        (View reserves)
-│   ├── get_lp_supply()       (View total LP)
-│   ├── get_fee()             (View fee rate)
-│   └── get_amount_out()      (Calculate swap output)
+│   ├── create_global_registry() (Initialize registry - once)
+│   ├── create_pool()            (Create pool with duplicate check)
+│   ├── add_liquidity()          (Deposit & mint LP)
+│   ├── remove_liquidity()       (Burn LP & withdraw)
+│   ├── swap_x_to_y()            (Trade X for Y)
+│   ├── swap_y_to_x()            (Trade Y for X)
+│   ├── pool_exists()            (Check if pool exists)
+│   ├── get_pool_address()       (Get pool address by type)
+│   ├── get_reserves()           (View reserves)
+│   ├── get_lp_supply()          (View total LP)
+│   ├── get_fee()                (View fee rate)
+│   └── get_amount_out()         (Calculate swap output)
 │
 └── Helper Functions
-    ├── safe_mul()            (Overflow-safe multiplication)
-    ├── sqrt()                (Integer square root)
-    └── calculate_swap_output() (AMM formula)
+    ├── sqrt_u128()              (Integer square root with u128)
+    └── calculate_swap_output()  (AMM formula with u128)
+```
+
+---
+
+## 🆕 New: Duplicate Pool Prevention
+
+### GlobalPoolRegistry
+
+A singleton shared object that tracks all created pools:
+
+```move
+public struct GlobalPoolRegistry has key {
+    id: UID,
+    pools: Table<vector<u8>, address>,  // hash(X,Y) -> pool_address
+}
+```
+
+**How it works:**
+
+1. Hash token type names: `blake2b256(type_name<X> || type_name<Y>)`
+2. Check if hash exists in registry table
+3. Abort with `E_POOL_ALREADY_EXISTS` if duplicate
+4. Register new pool if unique
+
+**Benefits:**
+
+- ✅ Prevents fragmented liquidity across duplicate pools
+- ✅ Ensures canonical pool per token pair
+- ✅ Gas-efficient table lookup
+- ✅ Type-safe via Move generics
+
+### Setup (One-time)
+
+```move
+// Call once during deployment
+DEX::create_global_registry(ctx);
+```
+
+### Create Pool (Now requires registry)
+
+```move
+// Pass registry reference
+DEX::create_pool<X, Y>(
+    &mut global_registry,
+    fee_bps,
+    ctx
+);
+```
+
+### View Functions
+
+```move
+// Check if pool exists for token pair
+let exists: bool = DEX::pool_exists<IOTA, USDC>(&registry);
+
+// Get pool address (returns Option<address>)
+let pool_addr: Option<address> = DEX::get_pool_address<IOTA, USDC>(&registry);
 ```
 
 ---
 
 ## 📝 Key Functions
 
-### `create_pool<X, Y>(fee_bps, ctx)`
-Creates a new liquidity pool with LP token.
-- Creates fungible `Coin<LP<X, Y>>` token
-- Initializes empty reserves
-- Shares pool and registry objects
+### `create_pool<X, Y>(registry, fee_bps, ctx)` (Updated)
+
+Creates a new liquidity pool with duplicate prevention.
+
+- Checks GlobalPoolRegistry for existing pool
+- Aborts with `E_POOL_ALREADY_EXISTS` if duplicate
+- Hashes type names for deterministic identification
+- Registers pool address in global table
+- Shares pool object for public access
+
+**Registry Required:** Must pass `&mut GlobalPoolRegistry` as first argument.
 
 ### `add_liquidity<X, Y>(pool, registry, coin_x, coin_y, min_lp_amount, ctx)`
+
 Adds liquidity and mints LP tokens.
+
 - **Initial:** `LP = sqrt(x * y)`, locks 1000 LP, returns rest
 - **Subsequent:** `LP = min(x/reserve_x, y/reserve_y) * total_supply`
 - Slippage protection via `min_lp_amount`
 
 ### `remove_liquidity<X, Y>(pool, registry, lp_token, min_x, min_y, ctx)`
+
 Burns LP tokens and withdraws proportional reserves.
+
 - `amount_x = (reserve_x * lp_amount) / total_supply`
 - `amount_y = (reserve_y * lp_amount) / total_supply`
 - Slippage protection via `min_x`, `min_y`
 
 ### `swap_x_to_y<X, Y>(pool, coin_in, min_amount_out, ctx)`
+
 Trades X for Y using constant product formula.
+
 - `output = (input * (1 - fee) * reserve_out) / (reserve_in + input * (1 - fee))`
 - Slippage protection via `min_amount_out`
 
@@ -98,11 +178,13 @@ Trades X for Y using constant product formula.
 ## 🧮 Formulas
 
 ### Constant Product AMM
+
 ```
 x * y = k (before fees)
 ```
 
 ### Initial LP Minting
+
 ```
 product = safe_mul(amount_x, amount_y)
 initial_lp = sqrt(product)
@@ -111,6 +193,7 @@ user_lp = initial_lp - MINIMUM_LIQUIDITY (1000)
 ```
 
 ### Subsequent LP Minting
+
 ```
 lp_from_x = (amount_x * pool.lp_supply) / reserve_x
 lp_from_y = (amount_y * pool.lp_supply) / reserve_y
@@ -118,12 +201,14 @@ lp_amount = min(lp_from_x, lp_from_y)
 ```
 
 ### Swap Output
+
 ```
 amount_in_with_fee = amount_in * (10000 - fee_bps) / 10000
 output = (amount_in_with_fee * reserve_out) / (reserve_in + amount_in_with_fee)
 ```
 
 ### Safe Multiplication
+
 ```
 safe_mul(a, b):
   if a == 0 or b == 0:
@@ -174,6 +259,7 @@ E_SLIPPAGE_EXCEEDED: 5         // Output < min requested
 E_INVALID_POOL_STATE: 6        // Pool state inconsistent
 E_MIN_LIQUIDITY: 7             // Initial LP too small
 E_OVERFLOW: 8                  // Integer overflow detected
+E_POOL_ALREADY_EXISTS: 9       // Pool already exists for this token pair (NEW)
 ```
 
 ---
@@ -181,14 +267,26 @@ E_OVERFLOW: 8                  // Integer overflow detected
 ## 📦 Events
 
 ### PoolCreated
+
 ```move
 {
   pool_id: address,
-  fee_bps: u64
+  fee_bps: u64,
+  type_x: vector<u8>,  // NEW: Token X type name
+  type_y: vector<u8>,  // NEW: Token Y type name
+}
+```
+
+### RegistryCreated (NEW)
+
+```move
+{
+  registry_id: address,
 }
 ```
 
 ### LiquidityAdded
+
 ```move
 {
   pool_id: address,
@@ -199,6 +297,7 @@ E_OVERFLOW: 8                  // Integer overflow detected
 ```
 
 ### LiquidityRemoved
+
 ```move
 {
   pool_id: address,
@@ -209,6 +308,7 @@ E_OVERFLOW: 8                  // Integer overflow detected
 ```
 
 ### Swap
+
 ```move
 {
   pool_id: address,
@@ -222,14 +322,32 @@ E_OVERFLOW: 8                  // Integer overflow detected
 
 ## 💡 Usage Examples
 
-### Create Pool
+### Create Global Registry (Once)
+
 ```move
 use kanari_network::DEX;
 
-DEX::create_pool<IOTA, USDC>(DEX::FEE_LOW, ctx);
+// Deploy time - create singleton registry
+DEX::create_global_registry(ctx);
+```
+
+### Create Pool
+
+```move
+use kanari_network::DEX;
+
+// Pass registry reference to prevent duplicates
+DEX::create_pool<IOTA, USDC>(
+    &mut global_registry,
+    DEX::FEE_LOW,
+    ctx
+);
+
+// Attempting to create duplicate pool will abort with E_POOL_ALREADY_EXISTS
 ```
 
 ### Add Initial Liquidity
+
 ```move
 let lp_tokens = DEX::add_liquidity<IOTA, USDC>(
     &mut pool,
@@ -243,6 +361,7 @@ let lp_tokens = DEX::add_liquidity<IOTA, USDC>(
 ```
 
 ### Add More Liquidity
+
 ```move
 let lp = DEX::add_liquidity<IOTA, USDC>(
     &mut pool,
@@ -255,6 +374,7 @@ let lp = DEX::add_liquidity<IOTA, USDC>(
 ```
 
 ### Remove Liquidity
+
 ```move
 let (iota, usdc) = DEX::remove_liquidity<IOTA, USDC>(
     &mut pool,
@@ -267,6 +387,7 @@ let (iota, usdc) = DEX::remove_liquidity<IOTA, USDC>(
 ```
 
 ### Swap
+
 ```move
 let usdc_out = DEX::swap_x_to_y<IOTA, USDC>(
     &mut pool,
@@ -277,7 +398,15 @@ let usdc_out = DEX::swap_x_to_y<IOTA, USDC>(
 ```
 
 ### Query Pool Info
+
 ```move
+// Check if pool exists
+let exists = DEX::pool_exists<IOTA, USDC>(&registry);
+
+// Get pool address
+let pool_addr_opt = DEX::get_pool_address<IOTA, USDC>(&registry);
+
+// Get reserves
 let (reserve_iota, reserve_usdc) = DEX::get_reserves(&pool);
 let total_lp = DEX::get_lp_supply(&pool);
 let fee = DEX::get_fee(&pool);
@@ -322,20 +451,25 @@ let expected_out = DEX::get_amount_out(&pool, 1000, true);
 
 ### ❌ Should Fail
 
-1. **Overflow**
+1. **Duplicate Pool**
+   - Create: IOTA/USDC pool
+   - Create again: IOTA/USDC pool
+   - Abort: E_POOL_ALREADY_EXISTS ✅
+
+2. **Overflow**
    - Input: 5B X + 5B Y
    - Abort: E_OVERFLOW ✅
 
-2. **Zero Amount**
+3. **Zero Amount**
    - Input: 0 X or 0 Y
    - Abort: E_ZERO_AMOUNT ✅
 
-3. **Slippage Exceeded**
+4. **Slippage Exceeded**
    - Expected: 1000 Y, min 1000
    - Actual: 999 Y
    - Abort: E_SLIPPAGE_EXCEEDED ✅
 
-4. **Insufficient LP**
+5. **Insufficient LP**
    - Burn: 1M LP (only have 100K)
    - Abort: E_INSUFFICIENT_LP_TOKENS ✅
 
@@ -390,6 +524,7 @@ let expected_out = DEX::get_amount_out(&pool, 1000, true);
 ## 📞 Support
 
 For questions or issues:
+
 - GitHub: `jamesatomc/token_iota`
 - Module: `kanari_network::DEX`
 
@@ -398,5 +533,5 @@ For questions or issues:
 **Built with ❤️ for IOTA Network**
 
 **Status:** 🟢 PRODUCTION READY  
-**Last Updated:** October 27, 2025  
-**Version:** 2.1 Final
+**Last Updated:** October 29, 2025  
+**Version:** 3.0 Final
