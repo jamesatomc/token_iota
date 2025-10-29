@@ -319,16 +319,7 @@ export default function SwapInterface() {
   };
 
   // Shorten a Move type string like "0x5fd5...::kanari::KANARI" -> "kanari::KANARI"
-  const shortType = (t?: string | null) => {
-    if (!t) return "";
-    try {
-      const parts = t.split("::");
-      if (parts.length >= 2) return parts.slice(-2).join("::");
-      return t;
-    } catch {
-      return t;
-    }
-  };
+  // Helper to shorten move types was removed because it's unused. Keep type display logic inline when needed.
 
   // Compute expected output amount when amountIn changes
   useEffect(() => {
@@ -428,11 +419,7 @@ export default function SwapInterface() {
 
   return (
 
-    // Outer wrapper prevents horizontal scrolling and ensures the component can fit the viewport
-    <div className="w-full overflow-x-hidden">
-
-
-      <Card maxWidth="max-w-md" minHeight="min-h-[560px]" className="shadow-sm mx-auto w-full">
+      <Card maxWidth="max-w-md" minHeight="min-h-[560px]" className="shadow-sm mx-auto w-full overflow-x-hidden">
         <h2 className="text-2xl font-bold mb-6 text-gray-900">Swap Tokens</h2>
 
         {/* Pool Selection */}
@@ -515,6 +502,5 @@ export default function SwapInterface() {
           {loading ? "Swapping..." : !currentAccount ? "Connect Wallet" : "Swap"}
         </button>
       </Card>
-    </div>
   );
 }
