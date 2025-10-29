@@ -14,7 +14,7 @@ public entry fun create_registry(ctx: &mut TxContext) {
 public entry fun create_pool<X, Y>(
     registry: &mut GlobalPoolRegistry,
     fee_bps: u64,
-    ctx: &mut TxContext
+    ctx: &mut TxContext,
 ) {
     DEX::create_pool<X, Y>(registry, fee_bps, ctx);
 }

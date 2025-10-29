@@ -27,6 +27,9 @@ const BASIS_POINTS: u64 = 10000;
 // Minimum liquidity locked forever (prevent division by zero attacks)
 const MINIMUM_LIQUIDITY: u64 = 10;
 
+// Maximum value for u64 (used in overflow checks)
+const U64_MAX: u128 = 18446744073709551615u128;
+
 /// LP Token receipt - proves liquidity ownership
 public struct LPToken<phantom X, phantom Y> has key, store {
     id: UID,
@@ -106,14 +109,22 @@ public fun create_pool<X, Y>(
 ) {
     assert!(fee_bps == FEE_LOW || fee_bps == FEE_MED || fee_bps == FEE_HIGH, E_INVALID_FEE);
 
-    // Compute deterministic hash for this type pair
+    // Compute deterministic hash for this type pair (sorted to prevent duplicates)
     let ty_x = type_name::get_with_original_ids<X>().into_string().into_bytes();
     let ty_y = type_name::get_with_original_ids<Y>().into_string().into_bytes();
-    let mut concat = ty_x;
-    std::vector::append(&mut concat, ty_y);
+    
+    // Sort type names to ensure IOTA/KANARI and KANARI/IOTA get same hash
+    let (first, second) = if (compare_vectors(&ty_x, &ty_y)) {
+        (ty_x, ty_y)
+    } else {
+        (ty_y, ty_x)
+    };
+    
+    let mut concat = first;
+    std::vector::append(&mut concat, second);
     let pair_hash = hash::blake2b256(&concat);
 
-    // Check if pool already exists for this pair
+    // Check if pool already exists for this pair (in any order)
     assert!(!table::contains(&registry.pools, pair_hash), E_POOL_ALREADY_EXISTS);
 
     let pool = LiquidityPool<X, Y> {
@@ -151,7 +162,7 @@ fun safe_mul(a: u64, b: u64): u64 {
         let result_128 = a_128 * b_128;
 
         // Check if result fits in u64
-        let max_u64 = 18446744073709551615u128;
+        let max_u64 = U64_MAX;
         assert!(result_128 <= max_u64, E_OVERFLOW);
 
         (result_128 as u64)
@@ -221,8 +232,7 @@ public fun add_liquidity<X, Y>(
         let initial_lp_128 = sqrt_u128(product);
 
         // Ensure result fits in u64
-        let max_u64 = 18446744073709551615u128;
-        assert!(initial_lp_128 <= max_u64, E_OVERFLOW);
+        assert!(initial_lp_128 <= U64_MAX, E_OVERFLOW);
 
         let initial_lp = (initial_lp_128 as u64);
         assert!(initial_lp > MINIMUM_LIQUIDITY, E_MIN_LIQUIDITY);
@@ -247,8 +257,7 @@ public fun add_liquidity<X, Y>(
         let lp_from_y_128 = (amount_y_128 * lp_supply_128) / old_y_128;
 
         // Ensure results fit in u64
-        let max_u64 = 18446744073709551615u128;
-        assert!(lp_from_x_128 <= max_u64 && lp_from_y_128 <= max_u64, E_OVERFLOW);
+        assert!(lp_from_x_128 <= U64_MAX && lp_from_y_128 <= U64_MAX, E_OVERFLOW);
 
         // Take minimum to prevent over-minting (user gets less LP if ratio is off)
         let lp = if (lp_from_x_128 < lp_from_y_128) {
@@ -321,8 +330,7 @@ public fun remove_liquidity<X, Y>(
     let amount_y_128 = (total_y_128 * lp_amount_128) / lp_supply_128;
 
     // Ensure results fit in u64
-    let max_u64 = 18446744073709551615u128;
-    assert!(amount_x_128 <= max_u64 && amount_y_128 <= max_u64, E_OVERFLOW);
+    assert!(amount_x_128 <= U64_MAX && amount_y_128 <= U64_MAX, E_OVERFLOW);
 
     let amount_x = (amount_x_128 as u64);
     let amount_y = (amount_y_128 as u64);
@@ -377,8 +385,7 @@ fun calculate_swap_output(amount_in: u64, balance_in: u64, balance_out: u64, fee
 
     // Ensure result fits in u64
     let result_128 = numerator / denominator;
-    let max_u64 = 18446744073709551615u128;
-    assert!(result_128 <= max_u64, E_OVERFLOW);
+    assert!(result_128 <= U64_MAX, E_OVERFLOW);
 
     (result_128 as u64)
 }
@@ -453,25 +460,66 @@ public fun swap_y_to_x<X, Y>(
     coin_out
 }
 
+// ========== Helper Functions ==========
+
+// Helper function to compare two vectors lexicographically
+// Returns true if v1 <= v2
+fun compare_vectors(v1: &vector<u8>, v2: &vector<u8>): bool {
+    let len1 = std::vector::length(v1);
+    let len2 = std::vector::length(v2);
+    let min_len = if (len1 < len2) { len1 } else { len2 };
+    
+    let mut i = 0;
+    while (i < min_len) {
+        let b1 = *std::vector::borrow(v1, i);
+        let b2 = *std::vector::borrow(v2, i);
+        if (b1 < b2) {
+            return true
+        } else if (b1 > b2) {
+            return false
+        };
+        i = i + 1;
+    };
+    
+    // If all bytes equal up to min_len, shorter vector is "less"
+    len1 <= len2
+}
+
 // ========== View Functions ==========
 
-/// Check if a pool exists for the given type pair
+/// Check if a pool exists for the given type pair (in any order)
 public fun pool_exists<X, Y>(registry: &GlobalPoolRegistry): bool {
     let ty_x = type_name::get_with_original_ids<X>().into_string().into_bytes();
     let ty_y = type_name::get_with_original_ids<Y>().into_string().into_bytes();
-    let mut concat = ty_x;
-    std::vector::append(&mut concat, ty_y);
+    
+    // Sort type names to match create_pool logic
+    let (first, second) = if (compare_vectors(&ty_x, &ty_y)) {
+        (ty_x, ty_y)
+    } else {
+        (ty_y, ty_x)
+    };
+    
+    let mut concat = first;
+    std::vector::append(&mut concat, second);
     let pair_hash = hash::blake2b256(&concat);
     
     table::contains(&registry.pools, pair_hash)
 }
 
-/// Get pool address for a given type pair (returns None if not exists)
+/// Get pool address for a given type pair (returns None if not exists, works with any order)
 public fun get_pool_address<X, Y>(registry: &GlobalPoolRegistry): Option<address> {
     let ty_x = type_name::get_with_original_ids<X>().into_string().into_bytes();
     let ty_y = type_name::get_with_original_ids<Y>().into_string().into_bytes();
-    let mut concat = ty_x;
-    std::vector::append(&mut concat, ty_y);
+    
+    // Sort type names to match create_pool logic
+    let (first, second) = if (compare_vectors(&ty_x, &ty_y)) {
+        (ty_x, ty_y)
+    } else {
+        (ty_y, ty_x)
+    };
+    
+    let mut concat = first;
+    std::vector::append(&mut concat, second);
     let pair_hash = hash::blake2b256(&concat);
     
     if (table::contains(&registry.pools, pair_hash)) {
