@@ -49,6 +49,33 @@ const formatAmount = (v: unknown): string => {
 };
 
 export default function PoolInfo() {
+  // Auth gating for this page
+  const [passwordInput, setPasswordInput] = useState("");
+  const [isAuthed, setIsAuthed] = useState<boolean>(() => {
+    try {
+      return sessionStorage.getItem("poolInfo:authed") === "1";
+    } catch {
+      return false;
+    }
+  });
+
+  const pagePassword = (CONTRACTS as unknown as { POOL_INFO_PASSWORD?: string }).POOL_INFO_PASSWORD;
+
+  const handleUnlock = () => {
+    // If no password configured, allow access
+    if (!pagePassword || pagePassword.trim() === "") {
+      try { sessionStorage.setItem("poolInfo:authed", "1"); } catch {};
+      setIsAuthed(true);
+      return;
+    }
+
+    if (passwordInput === pagePassword) {
+      try { sessionStorage.setItem("poolInfo:authed", "1"); } catch {}
+      setIsAuthed(true);
+    } else {
+      alert("Incorrect password");
+    }
+  };
   const [poolId, setPoolId] = useState("");
   const [poolData, setPoolData] = useState<PoolData | null>(null);
   const [loading, setLoading] = useState(false);
@@ -307,6 +334,26 @@ export default function PoolInfo() {
     // container: responsive padding, max width and centered
     <Card maxWidth="max-w-md" minHeight="min-h-[560px]" className="shadow-sm mx-auto w-full">
       <h2 className="text-2xl font-bold mb-6 text-gray-900">Pool Information</h2>
+
+      {/* Password gate: if not authed, show unlock UI */}
+      {!isAuthed && (
+        <div className="mb-4">
+          <label className="block text-sm font-medium mb-2 text-zinc-700">Enter password to view this page</label>
+          <div className="flex gap-2">
+            <input
+              type="password"
+              value={passwordInput}
+              onChange={(e) => setPasswordInput(e.target.value)}
+              className="flex-1 px-4 py-3 rounded-lg border border-gray-300 bg-white text-gray-900 focus:outline-none"
+            />
+            <button
+              onClick={handleUnlock}
+              className="px-4 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg"
+            >Unlock</button>
+          </div>
+          <p className="text-xs text-gray-500 mt-2">If no password is configured, the page is open. Configure <code className="font-mono">CONTRACTS.POOL_INFO_PASSWORD</code> to enable gating.</p>
+        </div>
+      )}
 
       <div className="mb-4">
         <label className="block text-sm font-medium mb-2 text-zinc-700">

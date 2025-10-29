@@ -23,6 +23,8 @@ export const CONTRACTS = {
   FEE_MED: 50,    // 0.5%
   FEE_HIGH: 100,  // 1.0%
   BASIS_POINTS: 10000,
+  // Optional UI page password (leave empty to disable)
+  POOL_INFO_PASSWORD: "123456",
 };
 
 // Module names
