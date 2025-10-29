@@ -5,6 +5,7 @@ import { useSignAndExecuteTransaction, useCurrentAccount, useIotaClient } from "
 import { Transaction } from "@iota/iota-sdk/transactions";
 import { CONTRACTS, MODULES, DEX_FUNCTIONS, parseAmount } from "../lib/contracts";
 import { usePools } from "../hooks/usePools";
+import Card from "./UI/Card";
 
 interface LPTokenInfo {
   objectId: string;
@@ -149,17 +150,29 @@ export default function LiquidityInterface() {
     return humanFromRawBig(outRaw, 6);
   };
 
-  // handlers that compute counterpart immediately
+  // handlers that compute counterpart only if pool has existing liquidity
   const handleAmountXChange = (val: string) => {
     setAmountX(val);
-    const other = computeCounterpart(val, true);
-    setAmountY(other);
+    // Only auto-calculate if pool has reserves (not a new empty pool)
+    const pool = pools.find((x) => x.poolId === selectedPool);
+    const hasReserves = pool && BigInt(pool.reserveX || "0") > BigInt(0) && BigInt(pool.reserveY || "0") > BigInt(0);
+    
+    if (hasReserves) {
+      const other = computeCounterpart(val, true);
+      setAmountY(other);
+    }
   };
 
   const handleAmountYChange = (val: string) => {
     setAmountY(val);
-    const other = computeCounterpart(val, false);
-    setAmountX(other);
+    // Only auto-calculate if pool has reserves (not a new empty pool)
+    const pool = pools.find((x) => x.poolId === selectedPool);
+    const hasReserves = pool && BigInt(pool.reserveX || "0") > BigInt(0) && BigInt(pool.reserveY || "0") > BigInt(0);
+    
+    if (hasReserves) {
+      const other = computeCounterpart(val, false);
+      setAmountX(other);
+    }
   };
 
   // Fetch user's LP tokens for selected pool
@@ -450,7 +463,7 @@ export default function LiquidityInterface() {
   // (estimation debounce removed - state was unused)
 
   return (
-    <div className="bg-white rounded-2xl shadow-lg p-6 max-w-md w-full min-h-[560px]">
+    <Card maxWidth="max-w-md" minHeight="min-h-[560px]" className="shadow-sm mx-auto w-full">
       <div className="flex mb-6 bg-gray-100 rounded-lg p-1">
         <button
           onClick={() => setTab("add")}
@@ -546,21 +559,43 @@ export default function LiquidityInterface() {
           {/* Token X Amount */}
           <div className="bg-gray-50 rounded-xl p-4 mb-4">
             <div className="flex items-center justify-between">
-              <div className="text-sm font-medium">{selectedPool && pools.find(p => p.poolId === selectedPool)?.tokenXSymbol || "Token X"} Amount</div>
+              <div className="text-sm font-medium">{selectedPoolObj?.tokenXSymbol || "Token X"} Amount</div>
               <div className="text-sm text-zinc-600 dark:text-zinc-400 flex items-center gap-3">
-                <div>Balance: {selectedPool ? (formatPoolBalance(pools.find(p => p.poolId === selectedPool)?.tokenX) ) : '0' } {pools.find(p => p.poolId === selectedPool)?.tokenXSymbol}</div>
-                <button onClick={async () => { const v = getPoolHumanBalance(pools.find(p => p.poolId === selectedPool)?.tokenX); handleAmountXChange(String(v)); }} className="text-xs px-2 py-1 rounded bg-transparent hover:bg-gray-100">Max</button>
-                <button onClick={async () => { const v = getPoolHumanBalance(pools.find(p => p.poolId === selectedPool)?.tokenX); handleAmountXChange(String(v/2)); }} className="text-xs px-2 py-1 rounded bg-transparent hover:bg-gray-100">50%</button>
+                <div>Balance: {selectedPoolObj ? formatPoolBalance(selectedPoolObj.tokenX) : '0'} {selectedPoolObj?.tokenXSymbol}</div>
+                <button 
+                  onClick={() => { 
+                    if (selectedPoolObj) {
+                      const v = getPoolHumanBalance(selectedPoolObj.tokenX); 
+                      handleAmountXChange(String(v)); 
+                    }
+                  }} 
+                  className="text-xs px-2 py-1 rounded bg-transparent hover:bg-gray-100"
+                >
+                  Max
+                </button>
+                <button 
+                  onClick={() => { 
+                    if (selectedPoolObj) {
+                      const v = getPoolHumanBalance(selectedPoolObj.tokenX); 
+                      handleAmountXChange(String(v/2)); 
+                    }
+                  }} 
+                  className="text-xs px-2 py-1 rounded bg-transparent hover:bg-gray-100"
+                >
+                  50%
+                </button>
               </div>
             </div>
  
             {/* token row */}
             <div className="mt-3">
               <button onClick={() => { /* could open token selector for liquidity */ }} className="w-full flex items-center gap-3 px-4 py-3 rounded-lg bg-white text-left">
-                <div className="w-10 h-10 rounded-full bg-blue-600 flex items-center justify-center text-white font-bold">{pools.find(p => p.poolId === selectedPool)?.tokenXSymbol?.[0] ?? 'T'}</div>
+                <div className="w-10 h-10 rounded-full bg-blue-600 flex items-center justify-center text-white font-bold">
+                  {selectedPoolObj?.tokenXSymbol?.[0] ?? 'T'}
+                </div>
                 <div>
-                  <div className="font-semibold">{pools.find(p => p.poolId === selectedPool)?.tokenXSymbol ?? 'Token X'}</div>
-                  <div className="text-xs text-gray-500">{pools.find(p => p.poolId === selectedPool)?.tokenXSymbol}</div>
+                  <div className="font-semibold">{selectedPoolObj?.tokenXSymbol ?? 'Token X'}</div>
+                  <div className="text-xs text-gray-500">{selectedPoolObj?.tokenXSymbol}</div>
                 </div>
                 <div className="ml-auto text-zinc-400">⇩</div>
               </button>
@@ -583,21 +618,43 @@ export default function LiquidityInterface() {
           {/* Token Y Amount */}
           <div className="bg-gray-50 rounded-xl p-4 mb-4">
             <div className="flex items-center justify-between">
-              <div className="text-sm font-medium">{selectedPool && pools.find(p => p.poolId === selectedPool)?.tokenYSymbol || "Token Y"} Amount</div>
+              <div className="text-sm font-medium">{selectedPoolObj?.tokenYSymbol || "Token Y"} Amount</div>
               <div className="text-sm text-zinc-600 dark:text-zinc-400 flex items-center gap-3">
-                <div>Balance: {selectedPool ? (formatPoolBalance(pools.find(p => p.poolId === selectedPool)?.tokenY) ) : '0' } {pools.find(p => p.poolId === selectedPool)?.tokenYSymbol}</div>
-                <button onClick={async () => { const v = getPoolHumanBalance(pools.find(p => p.poolId === selectedPool)?.tokenY); handleAmountYChange(String(v)); }} className="text-xs px-2 py-1 rounded bg-transparent hover:bg-gray-100">Max</button>
-                <button onClick={async () => { const v = getPoolHumanBalance(pools.find(p => p.poolId === selectedPool)?.tokenY); handleAmountYChange(String(v/2)); }} className="text-xs px-2 py-1 rounded bg-transparent hover:bg-gray-100">50%</button>
+                <div>Balance: {selectedPoolObj ? formatPoolBalance(selectedPoolObj.tokenY) : '0'} {selectedPoolObj?.tokenYSymbol}</div>
+                <button 
+                  onClick={() => { 
+                    if (selectedPoolObj) {
+                      const v = getPoolHumanBalance(selectedPoolObj.tokenY); 
+                      handleAmountYChange(String(v)); 
+                    }
+                  }} 
+                  className="text-xs px-2 py-1 rounded bg-transparent hover:bg-gray-100"
+                >
+                  Max
+                </button>
+                <button 
+                  onClick={() => { 
+                    if (selectedPoolObj) {
+                      const v = getPoolHumanBalance(selectedPoolObj.tokenY); 
+                      handleAmountYChange(String(v/2)); 
+                    }
+                  }} 
+                  className="text-xs px-2 py-1 rounded bg-transparent hover:bg-gray-100"
+                >
+                  50%
+                </button>
               </div>
             </div>
  
             {/* token row */}
             <div className="mt-3">
               <button onClick={() => { /* token selector */ }} className="w-full flex items-center gap-3 px-4 py-3 rounded-lg bg-white text-left">
-                <div className="w-10 h-10 rounded-full bg-blue-600 flex items-center justify-center text-white font-bold">{pools.find(p => p.poolId === selectedPool)?.tokenYSymbol?.[0] ?? 'T'}</div>
+                <div className="w-10 h-10 rounded-full bg-blue-600 flex items-center justify-center text-white font-bold">
+                  {selectedPoolObj?.tokenYSymbol?.[0] ?? 'T'}
+                </div>
                 <div>
-                  <div className="font-semibold">{pools.find(p => p.poolId === selectedPool)?.tokenYSymbol ?? 'Token Y'}</div>
-                  <div className="text-xs text-gray-500">{pools.find(p => p.poolId === selectedPool)?.tokenYSymbol}</div>
+                  <div className="font-semibold">{selectedPoolObj?.tokenYSymbol ?? 'Token Y'}</div>
+                  <div className="text-xs text-gray-500">{selectedPoolObj?.tokenYSymbol}</div>
                 </div>
                 <div className="ml-auto text-zinc-400">⇩</div>
               </button>
@@ -707,6 +764,6 @@ export default function LiquidityInterface() {
           </button>
         </>
       )}
-    </div>
+    </Card>
   );
 }

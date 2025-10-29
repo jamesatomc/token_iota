@@ -3,6 +3,7 @@
 import { useState, useMemo } from "react";
 import { useCurrentAccount, useIotaClient } from "@iota/dapp-kit";
 import { formatAmount as rawFormatAmount } from "../lib/contracts";
+import Card from "./UI/Card";
 
 interface PoolData {
   balance_x: string;
@@ -168,7 +169,7 @@ export default function PoolInfo() {
 
   return (
     // container: responsive padding, max width and centered
-    <div className="bg-white rounded-2xl shadow-lg p-4 sm:p-6 max-w-full sm:max-w-md md:max-w-lg w-full mx-auto">
+    <Card maxWidth="max-w-md" minHeight="min-h-[560px]" className="shadow-sm mx-auto w-full">
       <h2 className="text-2xl font-bold mb-6 text-gray-900">Pool Information</h2>
 
       <div className="mb-4">
@@ -279,6 +280,6 @@ export default function PoolInfo() {
           Enter a pool ID to view information
         </div>
       )}
-    </div>
+    </Card>
   );
 }

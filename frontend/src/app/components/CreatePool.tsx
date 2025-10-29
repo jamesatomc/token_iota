@@ -6,6 +6,7 @@ import { Transaction } from "@iota/iota-sdk/transactions";
 import { CONTRACTS, MODULES, DEX_FUNCTIONS } from "../lib/contracts";
 import TokenSelector, { TokenItem } from "./TokenSelector";
 import TokenManager from "./TokenManager";
+import Card from "./UI/Card";
 
 export default function CreatePool() {
   const [feeType, setFeeType] = useState<"low" | "med" | "high">("med");
@@ -128,7 +129,7 @@ export default function CreatePool() {
   };
 
   return (
-    <div className="bg-white rounded-2xl shadow-lg p-6 max-w-md w-full">
+    <Card maxWidth="max-w-md" minHeight="min-h-[560px]" className="shadow-sm mx-auto w-full">
       <h2 className="text-2xl font-bold mb-6 text-gray-900">Create New Pool</h2>
 
       <div className="mb-6">
@@ -337,6 +338,6 @@ export default function CreatePool() {
           }}
         />
       )}
-    </div>
+    </Card>
   );
 }

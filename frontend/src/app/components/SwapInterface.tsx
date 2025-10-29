@@ -6,6 +6,10 @@ import { Transaction } from "@iota/iota-sdk/transactions";
 import { CONTRACTS, MODULES, DEX_FUNCTIONS, parseAmount } from "../lib/contracts";
 import { usePools } from "../hooks/usePools";
 import TokenSelector from "./TokenSelector";
+import Card from "./UI/Card";
+import PoolSelect from "./UI/PoolSelect";
+import TokenAmount from "./UI/TokenAmount";
+import SlippageSelector from "./UI/SlippageSelector";
 
 export default function SwapInterface() {
   const [amountIn, setAmountIn] = useState("");
@@ -256,7 +260,7 @@ export default function SwapInterface() {
   };
 
   // Update tokens when pool changes
-  
+
 
   // Effect: when pool selected, set token types
   useEffect(() => {
@@ -412,216 +416,89 @@ export default function SwapInterface() {
   };
 
   return (
-    // Outer wrapper prevents horizontal scrolling and ensures the component can fit the viewport
-    <div className="w-full overflow-x-hidden">
-      {/* Card: reserve vertical space to avoid layout shift when async data loads */}
-      <div className="bg-white rounded-2xl shadow-sm p-6 w-full max-w-full sm:max-w-md mx-auto min-h-[520px]">
-        <h2 className="text-2xl font-bold mb-6 text-gray-900">Swap Tokens</h2>
+    // Use Card as the top-level container so this component matches others
+    <Card maxWidth="max-w-md" minHeight="min-h-[560px]" className="shadow-sm mx-auto w-full">
+      <h2 className="text-2xl font-bold mb-6 text-gray-900">Swap Tokens</h2>
 
-        {/* Pool Selection */}
-        <div className="mb-4">
-          <label className="block text-sm font-medium mb-2 text-gray-700">
-            Select Pool
-          </label>
-          {poolsLoading ? (
-            <div className="w-full px-4 py-3 rounded-lg border border-gray-300 bg-gray-50 text-gray-500 text-center">
-              Loading pools...
-            </div>
-          ) : pools.length > 0 ? (
-            <select
-              value={poolId}
-              onChange={(e) => setPoolId(e.target.value)}
-              className="w-full px-4 py-3 rounded-lg border border-gray-300 bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
-            >
-              <option value="">Select a pool...</option>
-              {pools.map((pool) => (
-                <option key={pool.poolId} value={pool.poolId}>
-                  {pool.tokenXSymbol}/{pool.tokenYSymbol} - {pool.poolId.slice(0, 8)}...{pool.poolId.slice(-6)} - Fee: {(parseInt(pool.feeBps) / 100).toFixed(2)}%
-                  {pool.reserveX && pool.reserveY && (
-                    ` - TVL: ${(parseInt(pool.reserveX) / 1e9).toFixed(2)} ${pool.tokenXSymbol} / ${(parseInt(pool.reserveY) / 1e9).toFixed(2)} ${pool.tokenYSymbol}`
-                  )}
-                </option>
-              ))}
-            </select>
-          ) : (
-            <div className="w-full px-4 py-3 rounded-lg border border-gray-300 bg-gray-50 text-gray-700 text-sm">
-              ⚠️ No pools found. Please create a pool first.
-            </div>
-          )}
-        </div>
+      {/* Pool Selection */}
+      <PoolSelect poolId={poolId} setPoolId={setPoolId} pools={pools} loading={poolsLoading} />
 
-        {/* From Token */}
-        <div className="bg-gray-50 rounded-xl p-4 mb-2 relative h-32">
-          <div className="flex justify-between mb-2">
-            <span className="text-sm text-gray-600">From</span>
-          </div>
+      {/* From Token */}
+      <TokenAmount
+        label="From"
+        amount={amountIn}
+        onChange={setAmountIn}
+        tokenSymbol={tokenFromSymbol ?? pools.find((p) => p.poolId === poolId)?.tokenXSymbol}
+        tokenType={tokenFromType ?? pools.find((p) => p.poolId === poolId)?.tokenX}
+        onOpenSelector={() => setShowSelectorFrom(true)}
+        balance={formatBalance(tokenFromType)}
+        onMax={handleMax}
+        onHalf={handleHalf}
+      />
 
-          {/* token badge top-right */}
-          <button
-            onClick={() => { setShowSelectorFrom(true); }}
-            className="absolute top-4 right-4 flex items-center gap-3 px-3 py-2 rounded-lg bg-white text-sm font-medium text-gray-900"
-          >
-            <div className="w-8 h-8 rounded-full bg-blue-500 flex items-center justify-center text-white font-bold">
-              {(tokenFromSymbol && tokenFromSymbol[0]) || "T"}
-            </div>
-            <div className="text-left">
-              <div className="font-semibold text-sm leading-tight">{tokenFromSymbol ?? (pools.find(p => p.poolId === poolId)?.tokenXSymbol) ?? (isXtoY ? "Token X" : "Token Y")}</div>
-              <div
-                className="text-xs text-gray-500 truncate max-w-60"
-                title={shortType(tokenFromType ?? pools.find(p => p.poolId === poolId)?.tokenX)}
-              >
-                {shortType(tokenFromType ?? pools.find(p => p.poolId === poolId)?.tokenX)}
-              </div>
-            </div>
-          </button>
-
-          <div className="flex items-start gap-4">
-            <input
-              type="number"
-              inputMode="decimal"
-              step="any"
-              min="0"
-              value={amountIn}
-              onChange={(e) => setAmountIn(e.target.value)}
-              placeholder="0.0"
-              className="flex-1 text-3xl font-semibold bg-transparent border-none outline-none text-gray-900"
-            />
-          </div>
-
-          <div className="flex items-center justify-between mt-3 text-sm text-gray-600">
-            <div>
-              Balance: {formatBalance(tokenFromType)} {tokenFromSymbol ?? pools.find(p => p.poolId === poolId)?.tokenXSymbol}
-            </div>
-            <div className="flex gap-6">
-              <button onClick={handleHalf} className="px-3 py-1 rounded-lg bg-transparent hover:bg-gray-100">50%</button>
-              <button onClick={handleMax} className="px-3 py-1 rounded-lg bg-transparent hover:bg-gray-100">Max</button>
-            </div>
-          </div>
-        </div>
-
-        {/* Switch Button */}
-        <div className="flex justify-center -my-2 relative z-10">
-          <button
-            onClick={switchDirection}
-            aria-label="Switch direction"
-            className="bg-white border-4 border-gray-50 rounded-full p-2 hover:bg-gray-100 cursor-pointer transition-transform duration-150 ease-in-out hover:scale-105 active:scale-95"
-          >
-            <svg className="w-6 h-6 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" />
-            </svg>
-          </button>
-        </div>
-
-        {/* To Token */}
-        <div className="bg-gray-50 rounded-xl p-4 mb-4 relative h-32">
-          <div className="flex justify-between mb-2">
-            <span className="text-sm text-gray-600">To</span>
-          </div>
-
-          {/* token badge top-right */}
-          <button
-            onClick={() => { setShowSelectorTo(true); }}
-            className="absolute top-4 right-4 flex items-center gap-3 px-3 py-2 rounded-lg bg-white text-sm font-medium text-gray-900"
-          >
-            <div className="w-8 h-8 rounded-full bg-blue-500 flex items-center justify-center text-white font-bold">
-              {(tokenToSymbol && tokenToSymbol[0]) || "T"}
-            </div>
-            <div className="text-left">
-              <div className="font-semibold text-sm leading-tight">{tokenToSymbol ?? (pools.find(p => p.poolId === poolId)?.tokenYSymbol) ?? (isXtoY ? "Token Y" : "Token X")}</div>
-              <div
-                className="text-xs text-gray-500 truncate max-w-60"
-                title={shortType(tokenToType ?? pools.find(p => p.poolId === poolId)?.tokenY)}
-              >
-                {shortType(tokenToType ?? pools.find(p => p.poolId === poolId)?.tokenY)}
-              </div>
-            </div>
-          </button>
-
-          <div className="flex items-start gap-4">
-            <input
-              type="number"
-              inputMode="decimal"
-              step="any"
-              min="0"
-              value={amountOut}
-              onChange={(e) => setAmountOut(e.target.value)}
-              placeholder="0.0"
-              className="flex-1 text-3xl font-semibold bg-transparent border-none outline-none text-gray-900"
-            />
-          </div>
-
-          <div className="mt-3 text-sm text-gray-600 flex items-center justify-between">
-            <div>
-              Balance: {formatBalance(tokenToType)} {tokenToSymbol ?? pools.find(p => p.poolId === poolId)?.tokenYSymbol}
-            </div>
-          </div>
-        </div>
-
-        {showSelectorFrom && (
-          <TokenSelector
-            isOpen={showSelectorFrom}
-            onClose={() => setShowSelectorFrom(false)}
-            tokens={tokenCandidates.map((t) => ({ type: t.type, symbol: t.symbol }))}
-            onSelect={(type, symbol) => {
-              setTokenFromType(type);
-              setTokenFromSymbol(symbol);
-              setShowSelectorFrom(false);
-              void fetchBalances();
-            }}
-          />
-        )}
-
-        {showSelectorTo && (
-          <TokenSelector
-            isOpen={showSelectorTo}
-            onClose={() => setShowSelectorTo(false)}
-            tokens={tokenCandidates.map((t) => ({ type: t.type, symbol: t.symbol }))}
-            onSelect={(type, symbol) => {
-              setTokenToType(type);
-              setTokenToSymbol(symbol);
-              setShowSelectorTo(false);
-              void fetchBalances();
-            }}
-          />
-        )}
-
-        {/* Slippage */}
-        <div className="mb-4">
-          <label className="block text-sm font-medium mb-2 text-gray-700">
-            Slippage Tolerance (%)
-          </label>
-          <div className="flex gap-2">
-            {["0.1", "0.5", "1.0"].map((value) => (
-              <button
-                key={value}
-                onClick={() => setSlippage(value)}
-                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${slippage === value
-                    ? "bg-blue-500 text-white"
-                    : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-                  }`}
-              >
-                {value}%
-              </button>
-            ))}
-            <input
-              type="number"
-              value={slippage}
-              onChange={(e) => setSlippage(e.target.value)}
-              className="w-28 text-center px-3 py-2 rounded-lg border border-gray-300 bg-white text-gray-900 text-sm"
-              placeholder="Custom"
-            />
-          </div>
-        </div>
-
-        {/* Swap Button */}
+      {/* Switch Button */}
+      <div className="flex justify-center -my-2 relative z-10">
         <button
-          onClick={handleSwap}
-          disabled={loading || !currentAccount || !amountIn || !poolId}
-          className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-gray-200 text-white font-semibold py-4 rounded-xl transition-colors disabled:cursor-not-allowed"
+          onClick={switchDirection}
+          aria-label="Switch direction"
+          className="bg-white border-4 border-gray-50 rounded-full p-2 hover:bg-gray-100 cursor-pointer transition-transform duration-150 ease-in-out hover:scale-105 active:scale-95"
         >
-          {loading ? "Swapping..." : !currentAccount ? "Connect Wallet" : "Swap"}
+          <svg className="w-6 h-6 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" />
+          </svg>
         </button>
       </div>
-    </div>
+
+      {/* To Token */}
+      <TokenAmount
+        label="To"
+        amount={amountOut}
+        onChange={setAmountOut}
+        tokenSymbol={tokenToSymbol ?? pools.find((p) => p.poolId === poolId)?.tokenYSymbol}
+        tokenType={tokenToType ?? pools.find((p) => p.poolId === poolId)?.tokenY}
+        onOpenSelector={() => setShowSelectorTo(true)}
+        balance={formatBalance(tokenToType)}
+      />
+
+      {showSelectorFrom && (
+        <TokenSelector
+          isOpen={showSelectorFrom}
+          onClose={() => setShowSelectorFrom(false)}
+          tokens={tokenCandidates.map((t) => ({ type: t.type, symbol: t.symbol }))}
+          onSelect={(type, symbol) => {
+            setTokenFromType(type);
+            setTokenFromSymbol(symbol);
+            setShowSelectorFrom(false);
+            void fetchBalances();
+          }}
+        />
+      )}
+
+      {showSelectorTo && (
+        <TokenSelector
+          isOpen={showSelectorTo}
+          onClose={() => setShowSelectorTo(false)}
+          tokens={tokenCandidates.map((t) => ({ type: t.type, symbol: t.symbol }))}
+          onSelect={(type, symbol) => {
+            setTokenToType(type);
+            setTokenToSymbol(symbol);
+            setShowSelectorTo(false);
+            void fetchBalances();
+          }}
+        />
+      )}
+
+      {/* Slippage */}
+      <SlippageSelector slippage={slippage} setSlippage={setSlippage} />
+
+      {/* Swap Button */}
+      <button
+        onClick={handleSwap}
+        disabled={loading || !currentAccount || !amountIn || !poolId}
+        className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-gray-200 text-white font-semibold py-4 rounded-xl transition-colors disabled:cursor-not-allowed"
+      >
+        {loading ? "Swapping..." : !currentAccount ? "Connect Wallet" : "Swap"}
+      </button>
+    </Card>
   );
 }

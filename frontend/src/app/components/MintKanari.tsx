@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useSignAndExecuteTransaction, useCurrentAccount } from "@iota/dapp-kit";
 import { Transaction } from "@iota/iota-sdk/transactions";
 import { CONTRACTS, MODULES, parseAmount } from "../lib/contracts";
+import Card from "./UI/Card";
 
 export default function MintKanari() {
   const [amount, setAmount] = useState("");
@@ -68,7 +69,7 @@ export default function MintKanari() {
   };
 
   return (
-    <div className="bg-white rounded-2xl shadow-lg p-6 max-w-md w-full">
+    <Card maxWidth="max-w-md" minHeight="min-h-[560px]" className="shadow-sm mx-auto w-full">
       <div className="flex items-center gap-3 mb-6">
         <div className="w-12 h-12 bg-blue-600 rounded-xl flex items-center justify-center">
           <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -246,6 +247,6 @@ export default function MintKanari() {
           </li>
         </ul>
       </div>
-    </div>
+    </Card>
   );
 }
