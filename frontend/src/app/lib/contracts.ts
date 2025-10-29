@@ -1,16 +1,16 @@
 // Contract addresses and configuration
 export const CONTRACTS = {
   // Replace with your deployed package ID
-  PACKAGE_ID: "0xb2d2dc407f4442b86e203146b079106bddab8c621e097c6f0636c27e92f6eb2b",
+  PACKAGE_ID: "0xbe8689e72a8634bef82a833d327938e04c47816a818b0c1ec1a6e46a81c6e13b",
   
   // Global Pool Registry ID (create once with create_registry function)
   REGISTRY_ID: "0xc402659c50b4c88e33a936660150f0eebf37824ff1d8eadf9437199e24bb1aaf", // Paste your GlobalPoolRegistry object ID here after calling create_registry
   
   // KANARI Token
   KANARI: {
-    TREASURY_CAP: "0x14303a706f3447d9287fd14484b06d7a2f2ee7c9e56e7d0c2aa16b0cc639ae96",
-    METADATA: "0xc80051b40393a44b984a979b5ae04422d1b8ff26963abd842fbee1a7af2e3494",
-    TYPE: "0xb2d2dc407f4442b86e203146b079106bddab8c621e097c6f0636c27e92f6eb2b::kanari::KANARI",
+    TREASURY_CAP: "0x0cd14c63bf8ff03154bb35d87c791ffec34d4d9b12e059c70003e368891441a9",
+    METADATA: "0x342c27da6354885413c946a07a24c93e90494f51587ff5e74ffc1b9aeca3d92d",
+    TYPE: "0xbe8689e72a8634bef82a833d327938e04c47816a818b0c1ec1a6e46a81c6e13b::kanari::KANARI",
   },
   
   // IOTA Token
