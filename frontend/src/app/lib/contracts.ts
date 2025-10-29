@@ -1,16 +1,16 @@
 // Contract addresses and configuration
 export const CONTRACTS = {
   // Replace with your deployed package ID
-  PACKAGE_ID: "0x1b0fae0170d4d81cb152ad4984ef214293a37cc6fafbc519ec80dcab359c2e83",
+  PACKAGE_ID: "0xb2d2dc407f4442b86e203146b079106bddab8c621e097c6f0636c27e92f6eb2b",
   
   // Global Pool Registry ID (create once with create_registry function)
-  REGISTRY_ID: "0x4c928d5517b756d211b8cfc000dc3dcff8c3023b925547122174f69b2b67ae3d", // Paste your GlobalPoolRegistry object ID here after calling create_registry
+  REGISTRY_ID: "0xc402659c50b4c88e33a936660150f0eebf37824ff1d8eadf9437199e24bb1aaf", // Paste your GlobalPoolRegistry object ID here after calling create_registry
   
   // KANARI Token
   KANARI: {
-    TREASURY_CAP: "0x595dcaa65c269e1103603823b1e6c47f5f6bae8d3ccdc759a08372eca1057121",
-    METADATA: "0xfeeb38436caaa4256242d3da57d481971026cea68e3c8f04ff6d19ff945a256d",
-    TYPE: "0x1b0fae0170d4d81cb152ad4984ef214293a37cc6fafbc519ec80dcab359c2e83::kanari::KANARI",
+    TREASURY_CAP: "0x14303a706f3447d9287fd14484b06d7a2f2ee7c9e56e7d0c2aa16b0cc639ae96",
+    METADATA: "0xc80051b40393a44b984a979b5ae04422d1b8ff26963abd842fbee1a7af2e3494",
+    TYPE: "0xb2d2dc407f4442b86e203146b079106bddab8c621e097c6f0636c27e92f6eb2b::kanari::KANARI",
   },
   
   // IOTA Token
@@ -31,6 +31,7 @@ export const MODULES = {
   DEX_FACTORY: "DEXFactory",
   KANARI: "kanari",
   DEEPBOOK: "DeepBook",
+  PRICE_ORACLE: "PriceOracle",
 };
 
 // Function names for DEX
@@ -47,6 +48,19 @@ export const DEX_FUNCTIONS = {
   GET_AMOUNT_OUT: "get_amount_out",
   POOL_EXISTS: "pool_exists",
   GET_POOL_ADDRESS: "get_pool_address",
+  // Oracle-related (PriceOracle module exposes these via DEXFactory entry wrappers)
+  CREATE_ORACLE: "create_oracle",
+  UPDATE_ORACLE: "update_oracle",
+  GET_TWAP: "get_twap_price",
+};
+
+// PriceOracle helper names
+export const ORACLE_FUNCTIONS = {
+  CREATE_ORACLE: "create_oracle",
+  UPDATE_ORACLE: "update_oracle",
+  GET_TWAP: "get_twap_price",
+  GET_TWAP_AT_TIME: "get_twap_price_at_time",
+  GET_OBSERVATION_COUNT: "get_observation_count",
 };
 
 // Function names for DeepBook
