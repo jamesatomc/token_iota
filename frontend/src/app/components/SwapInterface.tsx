@@ -18,6 +18,7 @@ export default function SwapInterface() {
   const [slippage, setSlippage] = useState("0.5"); // 0.5% default
   const [poolId, setPoolId] = useState("");
   const [loading, setLoading] = useState(false);
+  const [userHasSwitched, setUserHasSwitched] = useState(false); // Track if user manually switched
 
   const { mutate: signAndExecute } = useSignAndExecuteTransaction();
   const currentAccount = useCurrentAccount();
@@ -232,30 +233,27 @@ export default function SwapInterface() {
   };
 
   const switchDirection = () => {
+    // Toggle direction
     setIsXtoY(!isXtoY);
-    // swap typed tokens and symbols so the UI reflects the new direction
-    setTokenFromType((prevFrom) => {
-      const prevTo = tokenToType;
-      return prevTo ?? prevFrom;
-    });
-    setTokenToType((prevTo) => {
-      const prevFrom = tokenFromType;
-      return prevFrom ?? prevTo;
-    });
-    setTokenFromSymbol((prevFromSym) => {
-      const prevToSym = tokenToSymbol;
-      return prevToSym ?? prevFromSym;
-    });
-    setTokenToSymbol((prevToSym) => {
-      const prevFromSym = tokenFromSymbol;
-      return prevFromSym ?? prevToSym;
-    });
 
-    // swap amounts
+    // Swap tokens and symbols
+    const tempType = tokenFromType;
+    const tempSymbol = tokenFromSymbol;
+
+    setTokenFromType(tokenToType);
+    setTokenFromSymbol(tokenToSymbol);
+    setTokenToType(tempType);
+    setTokenToSymbol(tempSymbol);
+
+    // Swap amounts
+    const tempAmount = amountIn;
     setAmountIn(amountOut);
-    setAmountOut(amountIn);
+    setAmountOut(tempAmount);
 
-    // refetch balances so displayed balances update for the newly selected 'from' token
+    // Mark that user has manually switched
+    setUserHasSwitched(true);
+
+    // Refetch balances for the newly selected 'from' token
     void fetchBalances();
   };
 
@@ -267,12 +265,20 @@ export default function SwapInterface() {
     if (!poolId) return;
     const p = selectedPoolObj;
     if (!p) return;
+
+    // If user has manually switched, respect their choice
+    if (userHasSwitched) {
+      void fetchBalances();
+      return;
+    }
+
+    // Otherwise, set tokens from pool
     setTokenFromType(p.tokenX);
     setTokenFromSymbol(p.tokenXSymbol || (p.tokenX.split("::").pop() ?? null));
     setTokenToType(p.tokenY);
     setTokenToSymbol(p.tokenYSymbol || (p.tokenY.split("::").pop() ?? null));
     void fetchBalances();
-  }, [poolId, selectedPoolObj, fetchBalances]);
+  }, [poolId, selectedPoolObj, fetchBalances, userHasSwitched]);
 
   // Effect: refetch balances when account/client change
   useEffect(() => {
@@ -415,90 +421,100 @@ export default function SwapInterface() {
     setAmountIn(String(human));
   };
 
+  const handlePoolChange = (newPoolId: string) => {
+    setPoolId(newPoolId);
+    setUserHasSwitched(false); // Reset switch flag when pool changes
+  };
+
   return (
-    // Use Card as the top-level container so this component matches others
-    <Card maxWidth="max-w-md" minHeight="min-h-[560px]" className="shadow-sm mx-auto w-full">
-      <h2 className="text-2xl font-bold mb-6 text-gray-900">Swap Tokens</h2>
 
-      {/* Pool Selection */}
-      <PoolSelect poolId={poolId} setPoolId={setPoolId} pools={pools} loading={poolsLoading} />
+    // Outer wrapper prevents horizontal scrolling and ensures the component can fit the viewport
+    <div className="w-full overflow-x-hidden">
 
-      {/* From Token */}
-      <TokenAmount
-        label="From"
-        amount={amountIn}
-        onChange={setAmountIn}
-        tokenSymbol={tokenFromSymbol ?? pools.find((p) => p.poolId === poolId)?.tokenXSymbol}
-        tokenType={tokenFromType ?? pools.find((p) => p.poolId === poolId)?.tokenX}
-        onOpenSelector={() => setShowSelectorFrom(true)}
-        balance={formatBalance(tokenFromType)}
-        onMax={handleMax}
-        onHalf={handleHalf}
-      />
 
-      {/* Switch Button */}
-      <div className="flex justify-center -my-2 relative z-10">
+      <Card maxWidth="max-w-md" minHeight="min-h-[560px]" className="shadow-sm mx-auto w-full">
+        <h2 className="text-2xl font-bold mb-6 text-gray-900">Swap Tokens</h2>
+
+        {/* Pool Selection */}
+        <PoolSelect poolId={poolId} setPoolId={handlePoolChange} pools={pools} loading={poolsLoading} />
+
+        {/* From Token */}
+        <TokenAmount
+          label="From"
+          amount={amountIn}
+          onChange={setAmountIn}
+          tokenSymbol={tokenFromSymbol ?? pools.find((p) => p.poolId === poolId)?.tokenXSymbol}
+          tokenType={tokenFromType ?? pools.find((p) => p.poolId === poolId)?.tokenX}
+          onOpenSelector={() => setShowSelectorFrom(true)}
+          balance={formatBalance(tokenFromType)}
+          onMax={handleMax}
+          onHalf={handleHalf}
+        />
+
+        {/* Switch Button */}
+        <div className="flex justify-center -my-2 relative z-10">
+          <button
+            onClick={switchDirection}
+            aria-label="Switch direction"
+            className="bg-white border-4 border-gray-50 rounded-full p-2 hover:bg-gray-100 cursor-pointer transition-transform duration-150 ease-in-out hover:scale-105 active:scale-95"
+          >
+            <svg className="w-6 h-6 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" />
+            </svg>
+          </button>
+        </div>
+
+        {/* To Token */}
+        <TokenAmount
+          label="To"
+          amount={amountOut}
+          onChange={setAmountOut}
+          tokenSymbol={tokenToSymbol ?? pools.find((p) => p.poolId === poolId)?.tokenYSymbol}
+          tokenType={tokenToType ?? pools.find((p) => p.poolId === poolId)?.tokenY}
+          onOpenSelector={() => setShowSelectorTo(true)}
+          balance={formatBalance(tokenToType)}
+        />
+
+        {showSelectorFrom && (
+          <TokenSelector
+            isOpen={showSelectorFrom}
+            onClose={() => setShowSelectorFrom(false)}
+            tokens={tokenCandidates.map((t) => ({ type: t.type, symbol: t.symbol }))}
+            onSelect={(type, symbol) => {
+              setTokenFromType(type);
+              setTokenFromSymbol(symbol);
+              setShowSelectorFrom(false);
+              void fetchBalances();
+            }}
+          />
+        )}
+
+        {showSelectorTo && (
+          <TokenSelector
+            isOpen={showSelectorTo}
+            onClose={() => setShowSelectorTo(false)}
+            tokens={tokenCandidates.map((t) => ({ type: t.type, symbol: t.symbol }))}
+            onSelect={(type, symbol) => {
+              setTokenToType(type);
+              setTokenToSymbol(symbol);
+              setShowSelectorTo(false);
+              void fetchBalances();
+            }}
+          />
+        )}
+
+        {/* Slippage */}
+        <SlippageSelector slippage={slippage} setSlippage={setSlippage} />
+
+        {/* Swap Button */}
         <button
-          onClick={switchDirection}
-          aria-label="Switch direction"
-          className="bg-white border-4 border-gray-50 rounded-full p-2 hover:bg-gray-100 cursor-pointer transition-transform duration-150 ease-in-out hover:scale-105 active:scale-95"
+          onClick={handleSwap}
+          disabled={loading || !currentAccount || !amountIn || !poolId}
+          className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-gray-200 text-white font-semibold py-4 rounded-xl transition-colors disabled:cursor-not-allowed"
         >
-          <svg className="w-6 h-6 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" />
-          </svg>
+          {loading ? "Swapping..." : !currentAccount ? "Connect Wallet" : "Swap"}
         </button>
-      </div>
-
-      {/* To Token */}
-      <TokenAmount
-        label="To"
-        amount={amountOut}
-        onChange={setAmountOut}
-        tokenSymbol={tokenToSymbol ?? pools.find((p) => p.poolId === poolId)?.tokenYSymbol}
-        tokenType={tokenToType ?? pools.find((p) => p.poolId === poolId)?.tokenY}
-        onOpenSelector={() => setShowSelectorTo(true)}
-        balance={formatBalance(tokenToType)}
-      />
-
-      {showSelectorFrom && (
-        <TokenSelector
-          isOpen={showSelectorFrom}
-          onClose={() => setShowSelectorFrom(false)}
-          tokens={tokenCandidates.map((t) => ({ type: t.type, symbol: t.symbol }))}
-          onSelect={(type, symbol) => {
-            setTokenFromType(type);
-            setTokenFromSymbol(symbol);
-            setShowSelectorFrom(false);
-            void fetchBalances();
-          }}
-        />
-      )}
-
-      {showSelectorTo && (
-        <TokenSelector
-          isOpen={showSelectorTo}
-          onClose={() => setShowSelectorTo(false)}
-          tokens={tokenCandidates.map((t) => ({ type: t.type, symbol: t.symbol }))}
-          onSelect={(type, symbol) => {
-            setTokenToType(type);
-            setTokenToSymbol(symbol);
-            setShowSelectorTo(false);
-            void fetchBalances();
-          }}
-        />
-      )}
-
-      {/* Slippage */}
-      <SlippageSelector slippage={slippage} setSlippage={setSlippage} />
-
-      {/* Swap Button */}
-      <button
-        onClick={handleSwap}
-        disabled={loading || !currentAccount || !amountIn || !poolId}
-        className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-gray-200 text-white font-semibold py-4 rounded-xl transition-colors disabled:cursor-not-allowed"
-      >
-        {loading ? "Swapping..." : !currentAccount ? "Connect Wallet" : "Swap"}
-      </button>
-    </Card>
+      </Card>
+    </div>
   );
 }

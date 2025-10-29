@@ -14,6 +14,9 @@ const E_INSUFFICIENT_LIQUIDITY: u64 = 3;
 // Price precision (9 decimals for accurate calculations)
 const PRICE_PRECISION: u128 = 1_000_000_000;
 
+// Minimum time interval between observations (prevents spam)
+const MIN_OBSERVATION_INTERVAL: u64 = 10; // 10 seconds
+
 /// Single price observation at a specific time
 public struct Observation has copy, drop, store {
     timestamp: u64,         // Unix timestamp in seconds
@@ -117,6 +120,11 @@ public fun update_oracle<X, Y>(
     
     // Skip if no time has passed
     if (current_time <= last_obs.timestamp) {
+        return
+    };
+
+    // Skip if minimum interval hasn't passed (prevents spam)
+    if (current_time - last_obs.timestamp < MIN_OBSERVATION_INTERVAL) {
         return
     };
 
@@ -267,4 +275,57 @@ public fun get_pool_id<X, Y>(oracle: &PriceOracle<X, Y>): address {
 /// Get max observations limit
 public fun get_max_observations<X, Y>(oracle: &PriceOracle<X, Y>): u64 {
     oracle.max_observations
+}
+
+/// Get current price cumulative value
+public fun get_last_price_cumulative<X, Y>(oracle: &PriceOracle<X, Y>): u128 {
+    oracle.last_price_cumulative
+}
+
+// ========== View Functions Without Clock Dependency ==========
+
+/// Calculate TWAP using explicit current timestamp (for off-chain queries)
+public fun get_twap_price_at_time<X, Y>(
+    oracle: &PriceOracle<X, Y>,
+    time_window: u64,
+    current_timestamp_ms: u64,
+): u128 {
+    assert!(time_window > 0, E_INVALID_OBSERVATION);
+    
+    let obs_count = vector::length(&oracle.observations);
+    assert!(obs_count > 1, E_NO_OBSERVATIONS);
+
+    let current_time = current_timestamp_ms / 1000; // Convert to seconds
+    let target_start_time = if (current_time > time_window) {
+        current_time - time_window
+    } else {
+        0
+    };
+
+    // Find observations for TWAP calculation
+    let start_idx = find_observation_index(&oracle.observations, target_start_time);
+    let end_idx = obs_count - 1;
+
+    assert!(end_idx > start_idx, E_NO_OBSERVATIONS);
+
+    let start_obs = vector::borrow(&oracle.observations, start_idx);
+    let end_obs = vector::borrow(&oracle.observations, end_idx);
+
+    // Calculate TWAP
+    let price_delta = end_obs.price_cumulative - start_obs.price_cumulative;
+    let time_delta = end_obs.timestamp - start_obs.timestamp;
+
+    assert!(time_delta > 0, E_INVALID_OBSERVATION);
+
+    price_delta / (time_delta as u128)
+}
+
+/// Get observation at specific index (for debugging/monitoring)
+public fun get_observation_at_index<X, Y>(
+    oracle: &PriceOracle<X, Y>,
+    index: u64
+): (u64, u128) {
+    assert!(index < vector::length(&oracle.observations), E_INVALID_OBSERVATION);
+    let obs = vector::borrow(&oracle.observations, index);
+    (obs.timestamp, obs.price_cumulative)
 }
