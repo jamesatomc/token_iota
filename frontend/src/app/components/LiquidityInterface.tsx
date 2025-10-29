@@ -43,7 +43,7 @@ export default function LiquidityInterface() {
   const [slippage, setSlippage] = useState("0.5");
   const [loading, setLoading] = useState(false);
   const [lpTokens, setLPTokens] = useState<LPTokenInfo[]>([]);
-  
+
   const { mutate: signAndExecute } = useSignAndExecuteTransaction();
   const currentAccount = useCurrentAccount();
   const client = useIotaClient();
@@ -65,7 +65,7 @@ export default function LiquidityInterface() {
       const map: Record<string, string> = {};
       await Promise.all(types.map(async (t) => {
         try {
-          if (t === "0x2::iota::IOTA") {
+          if (t === CONTRACTS.IOTA.TYPE) {
             try {
               const c = client as unknown as IotaClientWithBalance;
               const bal = await c.getBalance?.({ owner: currentAccount.address });
@@ -95,7 +95,7 @@ export default function LiquidityInterface() {
     const raw = poolBalances[t];
     if (!raw) return '0';
     const human = Number(raw) / 1e9;
-    if (t === '0x2::iota::IOTA') return Math.floor(human).toLocaleString(undefined, { maximumFractionDigits: 0 });
+    if (t === CONTRACTS.IOTA.TYPE) return Math.floor(human).toLocaleString(undefined, { maximumFractionDigits: 0 });
     return human.toLocaleString(undefined, { maximumFractionDigits: 6 });
   }, [poolBalances]);
 
@@ -156,7 +156,7 @@ export default function LiquidityInterface() {
     // Only auto-calculate if pool has reserves (not a new empty pool)
     const pool = pools.find((x) => x.poolId === selectedPool);
     const hasReserves = pool && BigInt(pool.reserveX || "0") > BigInt(0) && BigInt(pool.reserveY || "0") > BigInt(0);
-    
+
     if (hasReserves) {
       const other = computeCounterpart(val, true);
       setAmountY(other);
@@ -168,7 +168,7 @@ export default function LiquidityInterface() {
     // Only auto-calculate if pool has reserves (not a new empty pool)
     const pool = pools.find((x) => x.poolId === selectedPool);
     const hasReserves = pool && BigInt(pool.reserveX || "0") > BigInt(0) && BigInt(pool.reserveY || "0") > BigInt(0);
-    
+
     if (hasReserves) {
       const other = computeCounterpart(val, false);
       setAmountX(other);
@@ -189,7 +189,7 @@ export default function LiquidityInterface() {
         }
 
         const lpTokenType = `${CONTRACTS.PACKAGE_ID}::${MODULES.DEX}::LPToken<${pool.tokenX}, ${pool.tokenY}>`;
-        
+
         const response = await client.getOwnedObjects({
           owner: currentAccount.address,
           filter: {
@@ -212,7 +212,7 @@ export default function LiquidityInterface() {
           });
 
         setLPTokens(tokenData);
-        
+
         // Log for debugging
         console.log("Found LP tokens:", tokenData);
       } catch (error) {
@@ -239,7 +239,7 @@ export default function LiquidityInterface() {
     // Validate amounts
     const amountXNum = parseFloat(amountX);
     const amountYNum = parseFloat(amountY);
-    
+
     if (amountXNum <= 0 || amountYNum <= 0) {
       alert("Please enter valid amounts greater than 0");
       return;
@@ -247,12 +247,12 @@ export default function LiquidityInterface() {
 
     // Check for potential overflow in Move contract
     const MAX_SAFE_AMOUNT = 4_000_000_000; // ~4 billion in human-readable units
-    
+
     if (amountXNum > MAX_SAFE_AMOUNT || amountYNum > MAX_SAFE_AMOUNT) {
       alert(`Amount too large! Maximum supported: ${MAX_SAFE_AMOUNT.toLocaleString()} tokens per side`);
       return;
     }
-    
+
     const productCheck = amountXNum * amountYNum;
     if (productCheck > 10_000_000_000_000) { // 10 trillion (10^13)
       alert("Product of amounts is too large! Try reducing both amounts.\nMax safe product: 10 trillion");
@@ -262,10 +262,10 @@ export default function LiquidityInterface() {
     setLoading(true);
     try {
       const tx = new Transaction();
-      
+
       const amountXParsed = parseAmount(amountX);
       const amountYParsed = parseAmount(amountY);
-      
+
       console.log("Adding liquidity:", {
         tokenX: pool.tokenXSymbol,
         tokenY: pool.tokenYSymbol,
@@ -274,12 +274,12 @@ export default function LiquidityInterface() {
         amountXParsed,
         amountYParsed,
       });
-      
+
       const minLpAmount = "0"; // Let contract decide minimum
 
-      // Check if tokenX is IOTA (0x2::iota::IOTA)
-      const isTokenXIota = pool.tokenX === "0x2::iota::IOTA";
-      const isTokenYIota = pool.tokenY === "0x2::iota::IOTA";
+      // Check if tokenX is IOTA
+      const isTokenXIota = pool.tokenX === CONTRACTS.IOTA.TYPE;
+      const isTokenYIota = pool.tokenY === CONTRACTS.IOTA.TYPE;
 
       let coinX;
       let coinY;
@@ -303,7 +303,7 @@ export default function LiquidityInterface() {
 
         const totalTokenX = tokenXCoins.data.reduce((sum, coin) => sum + BigInt(coin.balance), BigInt(0));
         const requiredTokenX = BigInt(amountXParsed);
-        
+
         if (totalTokenX < requiredTokenX) {
           alert(`Insufficient ${pool.tokenXSymbol} balance!\nYou have: ${Number(totalTokenX) / 1e9}\nRequired: ${amountXNum}`);
           setLoading(false);
@@ -311,7 +311,7 @@ export default function LiquidityInterface() {
         }
 
         const [primaryCoinX, ...restCoinsX] = tokenXCoins.data;
-        
+
         if (restCoinsX.length > 0) {
           tx.mergeCoins(
             tx.object(primaryCoinX.coinObjectId),
@@ -341,7 +341,7 @@ export default function LiquidityInterface() {
 
         const totalTokenY = tokenYCoins.data.reduce((sum, coin) => sum + BigInt(coin.balance), BigInt(0));
         const requiredTokenY = BigInt(amountYParsed);
-        
+
         if (totalTokenY < requiredTokenY) {
           alert(`Insufficient ${pool.tokenYSymbol} balance!\nYou have: ${Number(totalTokenY) / 1e9}\nRequired: ${amountYNum}`);
           setLoading(false);
@@ -349,7 +349,7 @@ export default function LiquidityInterface() {
         }
 
         const [primaryCoinY, ...restCoinsY] = tokenYCoins.data;
-        
+
         if (restCoinsY.length > 0) {
           tx.mergeCoins(
             tx.object(primaryCoinY.coinObjectId),
@@ -420,7 +420,7 @@ export default function LiquidityInterface() {
     setLoading(true);
     try {
       const tx = new Transaction();
-      
+
       // Calculate minimum amounts (with slippage) - set to 0 for now
       const minAmountX = "0";
       const minAmountY = "0";
@@ -467,21 +467,19 @@ export default function LiquidityInterface() {
       <div className="flex mb-6 bg-gray-100 rounded-lg p-1">
         <button
           onClick={() => setTab("add")}
-          className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-colors ${
-            tab === "add"
-              ? "bg-white text-gray-900 shadow"
-              : "text-gray-600"
-          }`}
+          className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-colors ${tab === "add"
+            ? "bg-white text-gray-900 shadow"
+            : "text-gray-600"
+            }`}
         >
           Add Liquidity
         </button>
         <button
           onClick={() => setTab("remove")}
-          className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-colors ${
-            tab === "remove"
-              ? "bg-white text-gray-900 shadow"
-              : "text-gray-600"
-          }`}
+          className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-colors ${tab === "remove"
+            ? "bg-white text-gray-900 shadow"
+            : "text-gray-600"
+            }`}
         >
           Remove Liquidity
         </button>
@@ -525,7 +523,7 @@ export default function LiquidityInterface() {
                       </div>
                       <div className="ml-3">
                         <div className="font-semibold">{p.tokenXSymbol}/{p.tokenYSymbol}</div>
-                        <div className="text-xs text-gray-500">{p.tokenXSymbol} paired with native {p.tokenYSymbol} (Dev fee: {(parseInt(p.feeBps)/100).toFixed(1)}%)</div>
+                        <div className="text-xs text-gray-500">{p.tokenXSymbol} paired with native {p.tokenYSymbol} (Dev fee: {(parseInt(p.feeBps) / 100).toFixed(1)}%)</div>
                       </div>
                     </div>
 
@@ -533,9 +531,9 @@ export default function LiquidityInterface() {
                       <div className="font-medium mb-2">Pool Information</div>
                       <div className="text-sm text-gray-600 grid grid-cols-2 gap-2">
                         <div> {p.tokenXSymbol} Reserve</div>
-                        <div className="text-right">{p.reserveX ? (Number(p.reserveX)/1e9).toString() : '0'} {p.tokenXSymbol}</div>
+                        <div className="text-right">{p.reserveX ? (Number(p.reserveX) / 1e9).toString() : '0'} {p.tokenXSymbol}</div>
                         <div>{p.tokenYSymbol} Reserve</div>
-                        <div className="text-right">{p.reserveY ? (Number(p.reserveY)/1e9).toString() : '0'} {p.tokenYSymbol}</div>
+                        <div className="text-right">{p.reserveY ? (Number(p.reserveY) / 1e9).toString() : '0'} {p.tokenYSymbol}</div>
                       </div>
                     </div>
                   </div>
@@ -562,31 +560,31 @@ export default function LiquidityInterface() {
               <div className="text-sm font-medium">{selectedPoolObj?.tokenXSymbol || "Token X"} Amount</div>
               <div className="text-sm text-zinc-600 dark:text-zinc-400 flex items-center gap-3">
                 <div>Balance: {selectedPoolObj ? formatPoolBalance(selectedPoolObj.tokenX) : '0'} {selectedPoolObj?.tokenXSymbol}</div>
-                <button 
-                  onClick={() => { 
+                <button
+                  onClick={() => {
                     if (selectedPoolObj) {
-                      const v = getPoolHumanBalance(selectedPoolObj.tokenX); 
-                      handleAmountXChange(String(v)); 
+                      const v = getPoolHumanBalance(selectedPoolObj.tokenX);
+                      handleAmountXChange(String(v));
                     }
-                  }} 
+                  }}
                   className="text-xs px-2 py-1 rounded bg-transparent hover:bg-gray-100"
                 >
                   Max
                 </button>
-                <button 
-                  onClick={() => { 
+                <button
+                  onClick={() => {
                     if (selectedPoolObj) {
-                      const v = getPoolHumanBalance(selectedPoolObj.tokenX); 
-                      handleAmountXChange(String(v/2)); 
+                      const v = getPoolHumanBalance(selectedPoolObj.tokenX);
+                      handleAmountXChange(String(v / 2));
                     }
-                  }} 
+                  }}
                   className="text-xs px-2 py-1 rounded bg-transparent hover:bg-gray-100"
                 >
                   50%
                 </button>
               </div>
             </div>
- 
+
             {/* token row */}
             <div className="mt-3">
               <button onClick={() => { /* could open token selector for liquidity */ }} className="w-full flex items-center gap-3 px-4 py-3 rounded-lg bg-white text-left">
@@ -600,7 +598,7 @@ export default function LiquidityInterface() {
                 <div className="ml-auto text-zinc-400">⇩</div>
               </button>
             </div>
- 
+
             <div className="mt-4 bg-white rounded-lg p-4">
               <input
                 type="number"
@@ -614,38 +612,38 @@ export default function LiquidityInterface() {
               />
             </div>
           </div>
- 
+
           {/* Token Y Amount */}
           <div className="bg-gray-50 rounded-xl p-4 mb-4">
             <div className="flex items-center justify-between">
               <div className="text-sm font-medium">{selectedPoolObj?.tokenYSymbol || "Token Y"} Amount</div>
               <div className="text-sm text-zinc-600 dark:text-zinc-400 flex items-center gap-3">
                 <div>Balance: {selectedPoolObj ? formatPoolBalance(selectedPoolObj.tokenY) : '0'} {selectedPoolObj?.tokenYSymbol}</div>
-                <button 
-                  onClick={() => { 
+                <button
+                  onClick={() => {
                     if (selectedPoolObj) {
-                      const v = getPoolHumanBalance(selectedPoolObj.tokenY); 
-                      handleAmountYChange(String(v)); 
+                      const v = getPoolHumanBalance(selectedPoolObj.tokenY);
+                      handleAmountYChange(String(v));
                     }
-                  }} 
+                  }}
                   className="text-xs px-2 py-1 rounded bg-transparent hover:bg-gray-100"
                 >
                   Max
                 </button>
-                <button 
-                  onClick={() => { 
+                <button
+                  onClick={() => {
                     if (selectedPoolObj) {
-                      const v = getPoolHumanBalance(selectedPoolObj.tokenY); 
-                      handleAmountYChange(String(v/2)); 
+                      const v = getPoolHumanBalance(selectedPoolObj.tokenY);
+                      handleAmountYChange(String(v / 2));
                     }
-                  }} 
+                  }}
                   className="text-xs px-2 py-1 rounded bg-transparent hover:bg-gray-100"
                 >
                   50%
                 </button>
               </div>
             </div>
- 
+
             {/* token row */}
             <div className="mt-3">
               <button onClick={() => { /* token selector */ }} className="w-full flex items-center gap-3 px-4 py-3 rounded-lg bg-white text-left">
@@ -659,7 +657,7 @@ export default function LiquidityInterface() {
                 <div className="ml-auto text-zinc-400">⇩</div>
               </button>
             </div>
- 
+
             <div className="mt-4 bg-white rounded-lg p-4">
               <input
                 type="number"
@@ -673,7 +671,7 @@ export default function LiquidityInterface() {
               />
             </div>
           </div>
- 
+
           {/* Slippage */}
           <div className="mb-4">
             <label className="block text-sm font-medium mb-2 text-gray-700">
@@ -684,11 +682,10 @@ export default function LiquidityInterface() {
                 <button
                   key={value}
                   onClick={() => setSlippage(value)}
-                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                    slippage === value
-                      ? "bg-blue-600 text-white"
-                      : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-                  }`}
+                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${slippage === value
+                    ? "bg-blue-600 text-white"
+                    : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+                    }`}
                 >
                   {value}%
                 </button>
@@ -702,19 +699,19 @@ export default function LiquidityInterface() {
               />
             </div>
           </div>
- 
+
           <button
             onClick={handleAddLiquidity}
             disabled={loading || !currentAccount}
             className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-gray-200 disabled:cursor-not-allowed text-white font-semibold py-4 rounded-xl transition-colors"
           >
             {loading ? (
-              <span className="flex items-center justify-center gap-2"><svg className="w-4 h-4 animate-spin" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"/></svg>Adding...</span>
+              <span className="flex items-center justify-center gap-2"><svg className="w-4 h-4 animate-spin" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" /></svg>Adding...</span>
             ) : !currentAccount ? "Connect Wallet" : "Add Liquidity"}
           </button>
-        
-        {/* estimation spinner state: small debounce while user types */}
-        
+
+          {/* estimation spinner state: small debounce while user types */}
+
         </>
       ) : (
         <>
@@ -725,36 +722,36 @@ export default function LiquidityInterface() {
             </label>
             {lpTokens.length === 0 ? (
               <div className="text-sm text-gray-500 p-4 border border-gray-300 rounded-lg">
-                 <p className="font-medium mb-2">⚠️ No LP tokens found</p>
-                 <p className="text-xs">
-                   Add liquidity to the current pool to receive LP tokens.
-                   <br />
-                   <span className="text-amber-600 dark:text-amber-400">
-                     Note: LP tokens from old deployments won&apos;t work with the new pool.
-                   </span>
-                 </p>
-               </div>
-             ) : (
-               <>
-                 <select
-                   value={selectedLPToken}
-                   onChange={(e) => setSelectedLPToken(e.target.value)}
-                   className="w-full px-4 py-3 rounded-lg border border-gray-300 bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                 >
-                   <option value="">Select LP token...</option>
-                   {lpTokens.map((token) => (
-                     <option key={token.objectId} value={token.objectId}>
-                       {token.objectId.slice(0, 8)}... (Amount: {(parseInt(token.amount) / 1e9).toFixed(4)} LP)
-                     </option>
-                   ))}
-                 </select>
-                 <p className="mt-2 text-xs text-gray-500">
-                   ℹ️ Found {lpTokens.length} LP token{lpTokens.length > 1 ? 's' : ''} from package: {CONTRACTS.PACKAGE_ID.slice(0, 8)}...
-                 </p>
-               </>
-             )}
-           </div>
- 
+                <p className="font-medium mb-2">⚠️ No LP tokens found</p>
+                <p className="text-xs">
+                  Add liquidity to the current pool to receive LP tokens.
+                  <br />
+                  <span className="text-amber-600 dark:text-amber-400">
+                    Note: LP tokens from old deployments won&apos;t work with the new pool.
+                  </span>
+                </p>
+              </div>
+            ) : (
+              <>
+                <select
+                  value={selectedLPToken}
+                  onChange={(e) => setSelectedLPToken(e.target.value)}
+                  className="w-full px-4 py-3 rounded-lg border border-gray-300 bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="">Select LP token...</option>
+                  {lpTokens.map((token) => (
+                    <option key={token.objectId} value={token.objectId}>
+                      {token.objectId.slice(0, 8)}... (Amount: {(parseInt(token.amount) / 1e9).toFixed(4)} LP)
+                    </option>
+                  ))}
+                </select>
+                <p className="mt-2 text-xs text-gray-500">
+                  ℹ️ Found {lpTokens.length} LP token{lpTokens.length > 1 ? 's' : ''} from package: {CONTRACTS.PACKAGE_ID.slice(0, 8)}...
+                </p>
+              </>
+            )}
+          </div>
+
           <button
             onClick={handleRemoveLiquidity}
             disabled={loading || !currentAccount || lpTokens.length === 0}

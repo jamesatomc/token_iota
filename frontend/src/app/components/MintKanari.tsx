@@ -11,7 +11,7 @@ export default function MintKanari() {
   const [recipient, setRecipient] = useState("");
   const [loading, setLoading] = useState(false);
   const [useCurrentAddress, setUseCurrentAddress] = useState(true);
-  
+
   const { mutate: signAndExecute } = useSignAndExecuteTransaction();
   const currentAccount = useCurrentAccount();
 
@@ -22,7 +22,7 @@ export default function MintKanari() {
     }
 
     const targetAddress = useCurrentAddress ? currentAccount.address : recipient;
-    
+
     if (!targetAddress) {
       alert("Please enter recipient address");
       return;
@@ -31,7 +31,7 @@ export default function MintKanari() {
     setLoading(true);
     try {
       const tx = new Transaction();
-      
+
       const amountParsed = parseAmount(amount);
 
       tx.moveCall({
@@ -161,25 +161,23 @@ export default function MintKanari() {
         <label className="block text-sm font-medium mb-3 text-zinc-700">
           Recipient
         </label>
-        
+
         <div className="flex gap-2 mb-3">
           <button
             onClick={() => setUseCurrentAddress(true)}
-            className={`flex-1 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-              useCurrentAddress
+            className={`flex-1 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${useCurrentAddress
                 ? "bg-blue-600 text-white"
                 : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-            }`}
+              }`}
           >
             My Address
           </button>
           <button
             onClick={() => setUseCurrentAddress(false)}
-            className={`flex-1 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-              !useCurrentAddress
+            className={`flex-1 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${!useCurrentAddress
                 ? "bg-blue-600 text-white"
                 : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-            }`}
+              }`}
           >
             Other Address
           </button>

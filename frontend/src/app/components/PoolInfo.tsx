@@ -1,8 +1,8 @@
 "use client";
 
 import { useState, useMemo } from "react";
-import { useCurrentAccount, useIotaClient } from "@iota/dapp-kit";
-import { formatAmount as rawFormatAmount } from "../lib/contracts";
+import { useCurrentAccount, useIotaClient, useSignAndExecuteTransaction } from "@iota/dapp-kit";
+import { formatAmount as rawFormatAmount, CONTRACTS, MODULES, DEX_FUNCTIONS } from "../lib/contracts";
 import Card from "./UI/Card";
 
 interface PoolData {
@@ -52,12 +52,20 @@ export default function PoolInfo() {
   const [poolId, setPoolId] = useState("");
   const [poolData, setPoolData] = useState<PoolData | null>(null);
   const [loading, setLoading] = useState(false);
+  // token type full Move type strings extracted from pool object (used for typeArguments)
+  const [tokenXTypeFull, setTokenXTypeFull] = useState<string | null>(null);
+  const [tokenYTypeFull, setTokenYTypeFull] = useState<string | null>(null);
   // new: labels for tokens (defaults kept for backward compatibility)
   const [tokenXLabel, setTokenXLabel] = useState("KANARI");
   const [tokenYLabel, setTokenYLabel] = useState("IOTA");
+  // Oracle UI state
+  const [oracleId, setOracleId] = useState("");
+  const [oracleMaxObservations, setOracleMaxObservations] = useState<number>(100);
+  const [oracleInfo, setOracleInfo] = useState<{ observations?: number } | null>(null);
 
   const client = useIotaClient();
   const currentAccount = useCurrentAccount();
+  const { mutate: signAndExecute } = useSignAndExecuteTransaction();
 
   const fetchPoolInfo = async () => {
     if (!poolId) {
@@ -90,14 +98,21 @@ export default function PoolInfo() {
             String(poolObject.data?.type ?? poolObject.data?.content?.type ?? "");
           const matches = typeStr.match(/<\s*([^,>]+)\s*,\s*([^>]+)\s*>/);
           if (matches) {
+            // set short labels
             xLabel = xLabel ?? matches[1].split("::").pop()?.trim();
             yLabel = yLabel ?? matches[2].split("::").pop()?.trim();
+            // store full type args for oracle calls
+            setTokenXTypeFull(matches[1].trim());
+            setTokenYTypeFull(matches[2].trim());
           } else if (typeStr) {
             // fallback: try to extract last segments split by commas or generics-like text
             const parts = typeStr.split(/[,<>]/).map((s) => s.trim()).filter(Boolean);
             if (parts.length >= 2) {
               xLabel = xLabel ?? parts[parts.length - 2].split("::").pop()?.trim();
               yLabel = yLabel ?? parts[parts.length - 1].split("::").pop()?.trim();
+              // attempt to capture full type args if available
+              setTokenXTypeFull(parts[parts.length - 2]);
+              setTokenYTypeFull(parts[parts.length - 1]);
             }
           }
         }
@@ -166,6 +181,127 @@ export default function PoolInfo() {
       tvlUsd,
     };
   }, [poolData]);
+
+  // Create oracle transaction
+  const handleCreateOracle = async () => {
+    if (!currentAccount) {
+      alert("Please connect your wallet");
+      return;
+    }
+    if (!poolId) {
+      alert("Please fetch a pool and provide a pool ID first");
+      return;
+    }
+    if (!tokenXTypeFull || !tokenYTypeFull) {
+      alert("Unable to determine pool token types. Fetch pool info first.");
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const tx = new (await import("@iota/iota-sdk/transactions")).Transaction();
+
+      tx.moveCall({
+        target: `${CONTRACTS.PACKAGE_ID}::${MODULES.DEX_FACTORY}::${DEX_FUNCTIONS.CREATE_ORACLE}`,
+        arguments: [
+          tx.object(poolId),
+          tx.pure.u64(oracleMaxObservations),
+          tx.object("0x6"), // system clock object
+        ],
+        typeArguments: [tokenXTypeFull, tokenYTypeFull],
+      });
+
+      signAndExecute(
+        { transaction: tx },
+        {
+          onSuccess: (res) => {
+            alert(`Create oracle submitted. Digest: ${res.digest}`);
+          },
+          onError: (err) => {
+            console.error("Create oracle failed:", err);
+            alert(`Create oracle failed: ${err?.message ?? String(err)}`);
+          },
+        }
+      );
+    } catch (e) {
+      console.error(e);
+      alert(String(e));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Update oracle transaction (requires oracle object id)
+  const handleUpdateOracle = async () => {
+    if (!currentAccount) {
+      alert("Please connect your wallet");
+      return;
+    }
+    if (!poolId || !oracleId) {
+      alert("Please provide both pool ID and oracle ID");
+      return;
+    }
+    if (!tokenXTypeFull || !tokenYTypeFull) {
+      alert("Unable to determine pool token types. Fetch pool info first.");
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const tx = new (await import("@iota/iota-sdk/transactions")).Transaction();
+
+      tx.moveCall({
+        target: `${CONTRACTS.PACKAGE_ID}::${MODULES.DEX_FACTORY}::${DEX_FUNCTIONS.UPDATE_ORACLE}`,
+        arguments: [
+          tx.object(oracleId),
+          tx.object(poolId),
+          tx.object("0x6"),
+        ],
+        typeArguments: [tokenXTypeFull, tokenYTypeFull],
+      });
+
+      signAndExecute({ transaction: tx }, {
+        onSuccess: (res) => alert(`Update oracle submitted. Digest: ${res.digest}`),
+        onError: (err) => {
+          console.error("Update oracle failed:", err);
+          alert(`Update oracle failed: ${err?.message ?? String(err)}`);
+        },
+      });
+    } catch (e) {
+      console.error(e);
+      alert(String(e));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Fetch basic oracle info (observations count) via getObject
+  const fetchOracleInfo = async () => {
+    if (!oracleId) {
+      alert("Please enter an oracle ID");
+      return;
+    }
+    try {
+      const obj = await client.getObject({ id: oracleId, options: { showContent: true } });
+      if (obj.data?.content?.dataType === "moveObject") {
+        const fields = obj.data.content.fields as unknown as Record<string, unknown>;
+        const obs = fields?.observations as unknown;
+        if (Array.isArray(obs)) {
+          setOracleInfo({ observations: obs.length });
+        } else if (typeof fields?.observations === "string") {
+          // some backends may represent vectors differently; best-effort
+          setOracleInfo({ observations: undefined });
+        } else {
+          setOracleInfo({ observations: undefined });
+        }
+      } else {
+        alert("Invalid oracle object");
+      }
+    } catch (err) {
+      console.error(err);
+      alert(String(err));
+    }
+  };
 
   return (
     // container: responsive padding, max width and centered
@@ -260,6 +396,65 @@ export default function PoolInfo() {
                   ${memoValues.tvlUsd}
                 </span>
               </div>
+            </div>
+          </div>
+
+          {/* Oracle Controls */}
+          <div className="bg-white border border-gray-200 rounded-xl p-4 sm:col-span-2">
+            <h3 className="font-semibold text-gray-900 mb-3 text-sm sm:text-base">Price Oracle</h3>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 items-end">
+              <div className="sm:col-span-1">
+                <label className="text-xs text-gray-600">Max observations</label>
+                <input
+                  type="number"
+                  value={oracleMaxObservations}
+                  onChange={(e) => setOracleMaxObservations(Math.max(1, Number(e.target.value || 1)))}
+                  className="w-full mt-1 px-3 py-2 rounded-lg border border-gray-200"
+                />
+              </div>
+
+              <div className="sm:col-span-1">
+                <button
+                  onClick={handleCreateOracle}
+                  disabled={loading || !tokenXTypeFull || !tokenYTypeFull}
+                  className="w-full px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-200"
+                >
+                  Create Oracle
+                </button>
+              </div>
+
+              <div className="sm:col-span-1">
+                <label className="text-xs text-gray-600">Oracle ID</label>
+                <input
+                  type="text"
+                  value={oracleId}
+                  onChange={(e) => setOracleId(e.target.value)}
+                  placeholder="0x..."
+                  className="w-full mt-1 px-3 py-2 rounded-lg border border-gray-200"
+                />
+              </div>
+            </div>
+
+            <div className="mt-3 flex gap-2">
+              <button
+                onClick={handleUpdateOracle}
+                disabled={loading || !oracleId}
+                className="px-3 py-2 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700 disabled:bg-gray-200"
+              >
+                Update Oracle
+              </button>
+
+              <button
+                onClick={fetchOracleInfo}
+                disabled={!oracleId}
+                className="px-3 py-2 border border-gray-200 rounded-lg hover:bg-gray-50"
+              >
+                Fetch Oracle Info
+              </button>
+
+              {oracleInfo && (
+                <div className="ml-auto text-sm text-gray-700">Observations: {oracleInfo.observations ?? "?"}</div>
+              )}
             </div>
           </div>
 

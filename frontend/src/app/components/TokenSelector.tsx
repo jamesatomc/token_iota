@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState, useRef } from "react";
 import { useIotaClient, useCurrentAccount } from "@iota/dapp-kit";
+import { CONTRACTS } from "../lib/contracts";
 import TokenManager from "./TokenManager";
 
 interface Coin {
@@ -68,9 +69,9 @@ export default function TokenSelector({ isOpen, onClose, tokens, onSelect }: Pro
   useEffect(() => {
     if (!isOpen) return;
 
-  // reset search query and autofocus when opened
-  // eslint-disable-next-line react-hooks/set-state-in-effect
-  setQuery("");
+    // reset search query and autofocus when opened
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setQuery("");
     setTimeout(() => inputRef.current?.focus(), 50);
 
     // Fetch balances for displayed tokens + custom tokens
@@ -88,7 +89,7 @@ export default function TokenSelector({ isOpen, onClose, tokens, onSelect }: Pro
         allTokens.map(async (t) => {
           try {
             // Try to use getBalance when available for native IOTA
-            if (t.type === "0x2::iota::IOTA") {
+            if (t.type === CONTRACTS.IOTA.TYPE) {
               try {
                 // narrow client type and use optional getBalance
                 const c = client as unknown as IotaClientWithBalance;
@@ -207,9 +208,9 @@ export default function TokenSelector({ isOpen, onClose, tokens, onSelect }: Pro
               <div className="text-right text-sm text-gray-700 min-w-[88px]">
                 <div className="mt-1">
                   {balances[t.type]
-                    ? (t.type === "0x2::iota::IOTA"
-                        ? Math.floor(Number(balances[t.type]) / 1e9).toLocaleString(undefined, { maximumFractionDigits: 0 })
-                        : (Number(balances[t.type]) / 1e9).toLocaleString(undefined, { maximumFractionDigits: 6 }))
+                    ? (t.type === CONTRACTS.IOTA.TYPE
+                      ? Math.floor(Number(balances[t.type]) / 1e9).toLocaleString(undefined, { maximumFractionDigits: 0 })
+                      : (Number(balances[t.type]) / 1e9).toLocaleString(undefined, { maximumFractionDigits: 6 }))
                     : "-"}
                 </div>
               </div>
@@ -248,7 +249,7 @@ export default function TokenSelector({ isOpen, onClose, tokens, onSelect }: Pro
           }
           // trigger balances refresh (use a typed window alias to avoid `any`)
           const _w = window as unknown as { requestIdleCallback?: (cb: () => void) => void };
-          _w.requestIdleCallback?.(() => {});
+          _w.requestIdleCallback?.(() => { });
         }}
         onChange={() => {
           try {

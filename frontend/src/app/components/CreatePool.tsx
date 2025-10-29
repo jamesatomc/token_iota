@@ -257,8 +257,8 @@ export default function CreatePool() {
               key={key}
               onClick={() => setFeeType(key)}
               className={`w-full p-4 rounded-xl border-2 transition-all text-left ${feeType === key
-                  ? "border-blue-600 bg-gray-50"
-                  : "border-gray-200 hover:border-gray-300"
+                ? "border-blue-600 bg-gray-50"
+                : "border-gray-200 hover:border-gray-300"
                 }`}
             >
               <div className="flex justify-between items-center">
@@ -274,8 +274,8 @@ export default function CreatePool() {
                 </div>
                 <div
                   className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${feeType === key
-                      ? "border-blue-600 bg-blue-600"
-                      : "border-gray-300"
+                    ? "border-blue-600 bg-blue-600"
+                    : "border-gray-300"
                     }`}
                 >
                   {feeType === key && (
