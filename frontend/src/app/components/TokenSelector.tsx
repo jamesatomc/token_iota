@@ -75,7 +75,10 @@ export default function TokenSelector({ isOpen, onClose, tokens, onSelect }: Pro
 
       const newBalances: Record<string, string> = {};
 
-      const allTokens = [...(tokens || []), ...customTokens].reduce((acc: TokenItem[], t) => {
+      // When tokens prop is not provided, fall back to DEFAULT_TOKENS so
+      // balances for the default list (KANARI, IOTA) are fetched.
+      const baseTokensForFetch = (tokens && tokens.length > 0) ? tokens : DEFAULT_TOKENS;
+      const allTokens = [...baseTokensForFetch, ...customTokens].reduce((acc: TokenItem[], t) => {
         if (!acc.find((x) => x.type === t.type)) acc.push(t);
         return acc;
       }, [] as TokenItem[]);

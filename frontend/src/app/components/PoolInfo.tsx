@@ -82,10 +82,8 @@ export default function PoolInfo() {
       // small feedback
       // In this simple component we use alert for feedback to avoid adding toast deps
       // but keep it subtle
-      // eslint-disable-next-line no-alert
       alert("Pool ID copied to clipboard");
-    } catch (e) {
-      // eslint-disable-next-line no-alert
+    } catch {
       alert("Failed to copy");
     }
   };

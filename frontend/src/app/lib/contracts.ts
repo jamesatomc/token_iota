@@ -1,16 +1,19 @@
 // Contract addresses and configuration
 export const CONTRACTS = {
   // Replace with your deployed package ID
-  PACKAGE_ID: "0xbe8689e72a8634bef82a833d327938e04c47816a818b0c1ec1a6e46a81c6e13b",
+  PACKAGE_ID: "0x365d048bce7d1984f5877632fe63695d44cf5eb56cf3e4085d9c6b20c9270b97",
   
-  // Global Pool Registry ID (create once with create_registry function)
-  REGISTRY_ID: "0x5bab3dea150fc5f4f8e3552b672437a57ca8f111a098dd3cef3dcaf1e5c76fff", // Paste your GlobalPoolRegistry object ID here after calling create_registry
-  
+  // Global Pool Registry ID (create once with create_registry function in DEX)
+  REGISTRY_ID: "0xddacbq5a444dfdcd69a0604df4b623932c1be656897455a4b775650aedc77474", // Paste your GlobalPoolRegistry object ID here after calling create_registry
+
+  // Global OrderBook Registry ID (create once with create_global_registry function in DeepBook)
+  REGISTRY_BOOK_ID: "0x0daedd92736893213e895d660dc1300ec85ab35557f09e4a6764430f80c51fe0", // Paste your GlobalOrderBookRegistry object ID here after calling create_global_registry
+
   // KANARI Token
   KANARI: {
-    TREASURY_CAP: "0x0cd14c63bf8ff03154bb35d87c791ffec34d4d9b12e059c70003e368891441a9",
-    METADATA: "0x342c27da6354885413c946a07a24c93e90494f51587ff5e74ffc1b9aeca3d92d",
-    TYPE: "0xbe8689e72a8634bef82a833d327938e04c47816a818b0c1ec1a6e46a81c6e13b::kanari::KANARI",
+    TREASURY_CAP: "0xb5ab540ee10d7fb67a41b242effc6090d8b5d5d6349f8241a216acfd686d070b",
+    METADATA: "0x724695595eafbb4a8afb81af6c99b677179288d64298ed417b9acdbd51ec942e",
+    TYPE: "0x365d048bce7d1984f5877632fe63695d44cf5eb56cf3e4085d9c6b20c9270b97::kanari::KANARI",
   },
   
   // IOTA Token
@@ -39,12 +42,13 @@ export type TokenItem = {
   type: string;
   symbol: string;
   name?: string;
+  decimals?: number;
 };
 
 // Default tokens shown in selectors (can be extended by TokenManager/custom tokens)
 export const DEFAULT_TOKENS: TokenItem[] = [
-  { type: CONTRACTS.KANARI.TYPE, symbol: "KANARI", name: "Kanari Token" },
-  { type: CONTRACTS.IOTA.TYPE, symbol: "IOTA", name: "IOTA" },
+  { type: CONTRACTS.KANARI.TYPE, symbol: "KANARI", name: "Kanari Token", decimals: 9 },
+  { type: CONTRACTS.IOTA.TYPE, symbol: "IOTA", name: "IOTA", decimals: 9 },
 ];
 
 // Function names for DEX
@@ -78,10 +82,24 @@ export const ORACLE_FUNCTIONS = {
 
 // Function names for DeepBook
 export const DEEPBOOK_FUNCTIONS = {
+  // Registry management
+  CREATE_GLOBAL_REGISTRY: "create_global_registry",
+  
+  // Order book creation
   CREATE_ORDER_BOOK: "create_order_book",
+  CREATE_ORDER_BOOK_WITH_REGISTRY: "create_order_book_with_registry",
+  GET_OR_CREATE: "get_or_create_order_book",
+  
+  // Order book queries
+  BOOK_EXISTS: "book_exists",
+  GET_BOOK_ADDRESS: "get_book_address",
+  
+  // Order placement
   PLACE_BID: "place_bid",
   PLACE_ASK: "place_ask",
   CANCEL_ORDER: "cancel_order",
+  
+  // Market data
   GET_BEST_BID: "get_best_bid",
   GET_BEST_ASK: "get_best_ask",
   GET_MAX_DEPTH: "get_max_depth",
@@ -93,6 +111,8 @@ export const DEEPBOOK_FUNCTIONS = {
   GET_ASK_COUNT: "get_ask_count",
   GET_BID_AT: "get_bid_at",
   GET_ASK_AT: "get_ask_at",
+  
+  // Calculations
   CALCULATE_QUOTE_AMOUNT: "calculate_quote_amount",
   CALCULATE_BASE_AMOUNT: "calculate_base_amount",
 };
