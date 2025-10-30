@@ -3,7 +3,7 @@
 import { useState, useCallback, useEffect } from "react";
 import { useSignAndExecuteTransaction, useCurrentAccount, useIotaClient } from "@iota/dapp-kit";
 import { Transaction } from "@iota/iota-sdk/transactions";
-import { CONTRACTS, MODULES, DEEPBOOK_FUNCTIONS, DEFAULT_TOKENS, DEEPBOOK, parseAmount, formatAmount } from "../lib/contracts";
+import { CONTRACTS, MODULES, DEEPBOOK_FUNCTIONS, DEFAULT_TOKENS, DEEPBOOK, parseAmount, formatAmount, TokenItem } from "../lib/contracts";
 import Card from "./UI/Card";
 import TokenSelector from "./TokenSelector";
 import OrderBookView from "./OrderBookView";
@@ -52,6 +52,26 @@ export default function DeepBookInterface() {
   const { mutate: signAndExecute } = useSignAndExecuteTransaction();
   const currentAccount = useCurrentAccount();
   const client = useIotaClient();
+
+  // Build a token list from registered pairs so TokenSelector can show all tokens present in registry
+  const availableTokensFromPairs: TokenItem[] = (() => {
+    try {
+      const types = new Set<string>();
+      registeredPairs.forEach((p) => {
+        if (p.baseToken) types.add(p.baseToken);
+        if (p.quoteToken) types.add(p.quoteToken);
+      });
+      const items: TokenItem[] = [];
+      types.forEach((t) => {
+        const found = DEFAULT_TOKENS.find((d) => d.type === t);
+        if (found) items.push(found);
+        else items.push({ type: t, symbol: t.split("::").pop() || t });
+      });
+      return items;
+    } catch {
+      return [];
+    }
+  })();
 
   // helper: get decimals for a token type from DEFAULT_TOKENS (fallback to 9)
   const getDecimals = (type: string) => {
@@ -407,6 +427,20 @@ export default function DeepBookInterface() {
     return () => clearInterval(iv);
   }, [client, lastCreatedId, refreshTrigger]); // Re-fetch when a new book is created or manual refresh
 
+  // When registered pairs are discovered, if the user hasn't selected a book yet,
+  // auto-select the first registered pair so the UI supports arbitrary pairs by default.
+  useEffect(() => {
+    if (registeredPairs.length > 0 && (!bookSelect || bookSelect === "")) {
+      const first = registeredPairs[0];
+      if (first) {
+        setBookSelect(first.bookId);
+        setBookId(first.bookId);
+        setBaseToken(first.baseToken);
+        setQuoteToken(first.quoteToken);
+      }
+    }
+  }, [registeredPairs]);
+
   // update normalized price when humanPrice changes
   useEffect(() => {
     if (!humanPrice || humanPrice.trim() === "") {
@@ -747,9 +781,19 @@ export default function DeepBookInterface() {
           <div>
             <label className="text-sm text-gray-600">Base Token</label>
             <button type="button" onClick={() => setShowSelectorBase(true)} className="mt-2 w-full flex items-center justify-between px-4 py-3 rounded-xl border border-gray-200 bg-white">
-              <div className="min-w-0">
+              <div className="min-w-0 text-left">
                 <div className="font-semibold text-gray-900">{baseToken.split("::").pop()}</div>
-                <div className="text-xs text-gray-500 truncate" title={baseToken}>{baseToken}</div>
+                <div className="flex items-center gap-2">
+                  <div className="text-xs text-gray-500 truncate" title={baseToken}>{baseToken ? baseToken.split("::").slice(-2).join("::") : baseToken}</div>
+                  <button
+                    type="button"
+                    onClick={() => navigator.clipboard?.writeText(baseToken)}
+                    className="text-xs text-gray-400 hover:text-gray-700"
+                    title="Copy token type/address"
+                  >
+                    Copy
+                  </button>
+                </div>
                 <div className="text-xs text-gray-500 mt-1">Balance: <span className="font-mono">{baseBalance !== null ? formatAmount(baseBalance, getDecimals(baseToken)) : "-"}</span></div>
               </div>
               <div className="text-xs text-gray-500">Select</div>
@@ -759,9 +803,19 @@ export default function DeepBookInterface() {
           <div>
             <label className="text-sm text-gray-600">Quote Token</label>
             <button type="button" onClick={() => setShowSelectorQuote(true)} className="mt-2 w-full flex items-center justify-between px-4 py-3 rounded-xl border border-gray-200 bg-white">
-              <div className="min-w-0">
+              <div className="min-w-0 text-left">
                 <div className="font-semibold text-gray-900">{quoteToken.split("::").pop()}</div>
-                <div className="text-xs text-gray-500 truncate" title={quoteToken}>{quoteToken}</div>
+                <div className="flex items-center gap-2">
+                  <div className="text-xs text-gray-500 truncate" title={quoteToken}>{quoteToken ? quoteToken.split("::").slice(-2).join("::") : quoteToken}</div>
+                  <button
+                    type="button"
+                    onClick={() => navigator.clipboard?.writeText(quoteToken)}
+                    className="text-xs text-gray-400 hover:text-gray-700"
+                    title="Copy token type/address"
+                  >
+                    Copy
+                  </button>
+                </div>
                 <div className="text-xs text-gray-500 mt-1">Balance: <span className="font-mono">{quoteBalance !== null ? formatAmount(quoteBalance, getDecimals(quoteToken)) : "-"}</span></div>
               </div>
               <div className="text-xs text-gray-500">Select</div>
@@ -1050,10 +1104,8 @@ export default function DeepBookInterface() {
                       onClick={() => {
                         if (!baseBalance) return;
                         const dec = getDecimals(baseToken);
-                        // 50% of baseBalance in human units
-                        const human = Number(formatAmount(baseBalance, dec));
-                        const half = (human / 2).toString();
-                        setQuantity(half);
+                        const half = baseBalance / BigInt(2);
+                        setQuantity(humanizeAmount(half, dec));
                       }}
                       disabled={!baseBalance}
                       className="px-2 py-1 text-xs bg-gray-100 rounded-lg disabled:opacity-50"
@@ -1065,8 +1117,7 @@ export default function DeepBookInterface() {
                       onClick={() => {
                         if (!baseBalance) return;
                         const dec = getDecimals(baseToken);
-                        const human = Number(formatAmount(baseBalance, dec));
-                        setQuantity(human.toString());
+                        setQuantity(humanizeAmount(baseBalance, dec));
                       }}
                       disabled={!baseBalance}
                       className="px-2 py-1 text-xs bg-gray-100 rounded-lg disabled:opacity-50"
@@ -1113,11 +1164,11 @@ export default function DeepBookInterface() {
         </div>
 
         {showSelectorBase && (
-          <TokenSelector isOpen={showSelectorBase} onClose={() => setShowSelectorBase(false)} tokens={DEFAULT_TOKENS} onSelect={(type) => { setBaseToken(type); setShowSelectorBase(false); }} />
+          <TokenSelector isOpen={showSelectorBase} onClose={() => setShowSelectorBase(false)} tokens={[...DEFAULT_TOKENS, ...availableTokensFromPairs]} onSelect={(type) => { setBaseToken(type); setShowSelectorBase(false); }} />
         )}
 
         {showSelectorQuote && (
-          <TokenSelector isOpen={showSelectorQuote} onClose={() => setShowSelectorQuote(false)} tokens={DEFAULT_TOKENS} onSelect={(type) => { setQuoteToken(type); setShowSelectorQuote(false); }} />
+          <TokenSelector isOpen={showSelectorQuote} onClose={() => setShowSelectorQuote(false)} tokens={[...DEFAULT_TOKENS, ...availableTokensFromPairs]} onSelect={(type) => { setQuoteToken(type); setShowSelectorQuote(false); }} />
         )}
       </Card>
 
@@ -1144,6 +1195,8 @@ export default function DeepBookInterface() {
             quoteDecimals={getDecimals(quoteToken)}
             bestBidPrice={bestBidPrice}
             bestAskPrice={bestAskPrice}
+            baseBalance={baseBalance}
+            quoteBalance={quoteBalance}
           />
 
           {/* Order Book View */}

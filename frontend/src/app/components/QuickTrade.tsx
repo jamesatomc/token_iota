@@ -15,6 +15,8 @@ interface QuickTradeProps {
   quoteDecimals?: number;
   bestBidPrice?: string; // normalized price
   bestAskPrice?: string; // normalized price
+  baseBalance?: bigint | null;
+  quoteBalance?: bigint | null;
 }
 
 export default function QuickTrade({
@@ -25,6 +27,8 @@ export default function QuickTrade({
   quoteDecimals = 9,
   bestBidPrice,
   bestAskPrice,
+  baseBalance,
+  quoteBalance,
 }: QuickTradeProps) {
   const [side, setSide] = useState<"buy" | "sell">("buy");
   const [quantity, setQuantity] = useState("");
@@ -46,6 +50,21 @@ export default function QuickTrade({
       return "N/A";
     }
   };
+
+  // Human-readable available balance string depending on side
+  const availableStr = (() => {
+    try {
+      if (side === 'buy') {
+        if (quoteBalance === undefined || quoteBalance === null) return '-';
+        return formatAmount(quoteBalance, quoteDecimals).replace(/\.?0+$/, '');
+      } else {
+        if (baseBalance === undefined || baseBalance === null) return '-';
+        return formatAmount(baseBalance, baseDecimals).replace(/\.?0+$/, '');
+      }
+    } catch {
+      return '-';
+    }
+  })();
 
   const handleQuickTrade = useCallback(async () => {
     if (!currentAccount) {
@@ -226,13 +245,91 @@ export default function QuickTrade({
         <label className="text-sm text-gray-600 mb-2 block">
           Quantity ({baseToken.split("::").pop()})
         </label>
-        <input
-          type="text"
-          value={quantity}
-          onChange={(e) => setQuantity(e.target.value)}
-          placeholder="e.g. 100"
-          className="w-full px-4 py-3 rounded-xl border border-gray-200 bg-white"
-        />
+        <div>
+          <input
+            type="text"
+            value={quantity}
+            onChange={(e) => setQuantity(e.target.value)}
+            placeholder="e.g. 100"
+            className="w-full px-4 py-3 rounded-xl border border-gray-200 bg-white"
+          />
+
+          <div className="mt-2 flex items-center justify-between">
+            <div className="text-xs text-gray-500">in {baseToken.split("::").pop()}</div>
+            <div className="flex items-center gap-2">
+              <div className="text-xs text-gray-500">Available: <span className="font-mono">{availableStr}</span></div>
+              <div className="flex items-center gap-1">
+                <button
+                  type="button"
+                  onClick={() => {
+                    // 50% logic depends on side
+                    try {
+                      if (side === 'sell') {
+                        if (!baseBalance) return;
+                        const half = baseBalance / BigInt(2);
+                        setQuantity(formatAmount(half, baseDecimals).replace(/\.?0+$/, ''));
+                      } else {
+                        // buy: compute how much base can be bought with 50% of quoteBalance
+                        if (!quoteBalance) return;
+                        const priceToUse = bestAskPrice;
+                        if (!priceToUse) return;
+                        const priceU64 = BigInt(priceToUse);
+                        const priceScale = BigInt(DEEPBOOK.PRICE_SCALE as number);
+                        const availableQuote = quoteBalance / BigInt(2);
+                        const diff = (quoteDecimals || 9) - (baseDecimals || 9);
+                        const pow = BigInt(10) ** BigInt(Math.abs(diff));
+                        let qtyU64: bigint;
+                        if (diff >= 0) {
+                          qtyU64 = (availableQuote * priceScale) / priceU64 / pow;
+                        } else {
+                          qtyU64 = (availableQuote * priceScale) / priceU64 * pow;
+                        }
+                        setQuantity(formatAmount(qtyU64, baseDecimals).replace(/\.?0+$/, ''));
+                      }
+                    } catch (err) {
+                      // ignore
+                    }
+                  }}
+                  className="px-2 py-1 text-xs bg-gray-100 rounded-lg"
+                >
+                  50%
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    try {
+                      if (side === 'sell') {
+                        if (!baseBalance) return;
+                        setQuantity(formatAmount(baseBalance, baseDecimals).replace(/\.?0+$/, ''));
+                      } else {
+                        if (!quoteBalance) return;
+                        const priceToUse = bestAskPrice;
+                        if (!priceToUse) return;
+                        const priceU64 = BigInt(priceToUse);
+                        const priceScale = BigInt(DEEPBOOK.PRICE_SCALE as number);
+                        const availableQuote = quoteBalance;
+                        const diff = (quoteDecimals || 9) - (baseDecimals || 9);
+                        const pow = BigInt(10) ** BigInt(Math.abs(diff));
+                        let qtyU64: bigint;
+                        if (diff >= 0) {
+                          qtyU64 = (availableQuote * priceScale) / priceU64 / pow;
+                        } else {
+                          qtyU64 = (availableQuote * priceScale) / priceU64 * pow;
+                        }
+                        setQuantity(formatAmount(qtyU64, baseDecimals).replace(/\.?0+$/, ''));
+                      }
+                    } catch (err) {
+                      // ignore
+                    }
+                  }}
+                  className="px-2 py-1 text-xs bg-gray-100 rounded-lg"
+                >
+                  100%
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
 
       {/* Estimated Total */}

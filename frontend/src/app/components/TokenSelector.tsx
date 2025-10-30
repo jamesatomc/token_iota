@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useRef } from "react";
 import { useIotaClient, useCurrentAccount } from "@iota/dapp-kit";
-import { CONTRACTS, TokenItem, DEFAULT_TOKENS } from "../lib/contracts";
+import { CONTRACTS, TokenItem, DEFAULT_TOKENS, formatAmount } from "../lib/contracts";
 import TokenManager from "./TokenManager";
 
 interface Coin {
@@ -208,9 +208,17 @@ export default function TokenSelector({ isOpen, onClose, tokens, onSelect }: Pro
               <div className="text-right text-sm text-gray-700 min-w-[88px]">
                 <div className="mt-1">
                   {balances[t.type]
-                    ? (t.type === CONTRACTS.IOTA.TYPE
-                      ? Math.floor(Number(balances[t.type]) / 1e9).toLocaleString(undefined, { maximumFractionDigits: 0 })
-                      : (Number(balances[t.type]) / 1e9).toLocaleString(undefined, { maximumFractionDigits: 6 }))
+                    ? (() => {
+                      try {
+                        const raw = balances[t.type];
+                        const bn = BigInt(raw);
+                        const dec = typeof t.decimals === 'number' ? t.decimals : 9;
+                        // formatAmount returns a fixed-decimal string; trim trailing zeros
+                        return formatAmount(bn, dec).replace(/\.?0+$/, '');
+                      } catch {
+                        return "-";
+                      }
+                    })()
                     : "-"}
                 </div>
               </div>
