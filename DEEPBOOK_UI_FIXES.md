@@ -3,6 +3,7 @@
 ## 🎯 ปัญหาที่แก้ไข
 
 UI ไม่สอดคล้องกับ Smart Contract `DeepBook.move` โดยเฉพาะเรื่อง:
+
 1. การใช้ Global OrderBook Registry
 2. Error handling ไม่ชัดเจน
 3. คำอธิบายใน UI ไม่เพียงพอ
@@ -27,10 +28,12 @@ DEEPBOOK_FUNCTIONS: {
 ### 2. **DeepBookInterface.tsx** - ปรับปรุง UI
 
 #### 2.1 แสดงสถานะ Registry
+
 - ✓ แสดงว่า registry enabled หรือไม่
 - ⚠️ เตือนถ้าไม่มี registry (อนุญาตให้สร้าง duplicate books)
 
 #### 2.2 ปรับปรุง Error Messages
+
 - แยก error cases ชัดเจน:
   - `E_ORDERBOOK_ALREADY_EXISTS` - book ซ้ำ
   - `E_INVALID_FEE` - fee ไม่ถูกต้อง
@@ -39,12 +42,14 @@ DEEPBOOK_FUNCTIONS: {
   - etc.
 
 #### 2.3 เพิ่มคำอธิบาย UI
+
 - Price input: อธิบาย normalized price
 - Quantity input: รองรับ decimal (เช่น 0.5)
 - Preview Quote: แสดง estimated quote amount
 - Info tooltips (ⓘ) สำหรับแต่ละ field
 
 #### 2.4 แสดงคำแนะนำการตั้งค่า Registry
+
 ```
 ⚠️ Registry not configured
 Without a registry, duplicate order books can be created.
@@ -56,6 +61,7 @@ How to setup:
 ```
 
 #### 2.5 ปรับปรุง Success Messages
+
 - แสดงข้อมูลชัดเจนเมื่อสร้าง book สำเร็จ
 - แสดงข้อมูล order เมื่อ place order สำเร็จ
 - Clear form หลัง order สำเร็จ
@@ -65,6 +71,7 @@ How to setup:
 ### Setup Registry (แนะนำ)
 
 1. **สร้าง Global Registry**
+
 ```bash
 iota client call \
   --package 0x485e1aa43a8de8e74869ab2dbc4b97bf65cfa97bcaa3fccb419abf1e65f7cbe4 \
@@ -73,6 +80,7 @@ iota client call \
 ```
 
 2. **Copy Object ID** จาก output:
+
 ```
 Created Objects:
  - ID: 0xc0ca73e7c8fd6bee94e883c1c238dc12a4261bafd5e1a7dcbaf7e681a96d4ff2
@@ -81,6 +89,7 @@ Created Objects:
 ```
 
 3. **Update contracts.ts**
+
 ```typescript
 REGISTRY_BOOK_ID: "0xc0ca73e7c8fd6bee94e883c1c238dc12a4261bafd5e1a7dcbaf7e681a96d4ff2"
 ```
@@ -88,10 +97,12 @@ REGISTRY_BOOK_ID: "0xc0ca73e7c8fd6bee94e883c1c238dc12a4261bafd5e1a7dcbaf7e681a96
 ### สร้าง Order Book
 
 **กับ Registry (แนะนำ):**
+
 - ใช้ `get_or_create_order_book` - จะคืน existing book หรือสร้างใหม่
 - ป้องกัน duplicate books สำหรับ token pair เดียวกัน
 
 **ไม่มี Registry:**
+
 - ใช้ `create_order_book` - สร้าง book ใหม่ทุกครั้ง
 - อนุญาตให้มี duplicate books (ไม่แนะนำ)
 
@@ -108,6 +119,7 @@ REGISTRY_BOOK_ID: "0xc0ca73e7c8fd6bee94e883c1c238dc12a4261bafd5e1a7dcbaf7e681a96
 ## 📋 Smart Contract Functions ที่ใช้
 
 ### Registry Functions
+
 - `create_global_registry()` - สร้าง registry ครั้งเดียว
 - `create_order_book_with_registry()` - สร้าง book ผ่าน registry
 - `get_or_create_order_book()` - หาหรือสร้าง (แนะนำ)
@@ -115,11 +127,13 @@ REGISTRY_BOOK_ID: "0xc0ca73e7c8fd6bee94e883c1c238dc12a4261bafd5e1a7dcbaf7e681a96
 - `get_book_address()` - ดึง address ของ existing book
 
 ### Order Functions
+
 - `place_bid()` - วาง buy order
 - `place_ask()` - วาง sell order
 - `cancel_order()` - ยกเลิก order
 
 ### Query Functions
+
 - `get_best_bid()` / `get_best_ask()` - ราคาดีที่สุด
 - `get_book_depth()` - liquidity ทั้งหมด
 - `get_spread()` - ส่วนต่างราคา
@@ -128,12 +142,14 @@ REGISTRY_BOOK_ID: "0xc0ca73e7c8fd6bee94e883c1c238dc12a4261bafd5e1a7dcbaf7e681a96
 ## 🎨 UI Improvements
 
 ### Before
+
 - Error messages ไม่ชัดเจน
 - ไม่มีคำอธิบาย normalized price
 - ไม่รู้ว่าต้องตั้งค่า registry หรือไม่
 - ไม่มี tooltips
 
 ### After
+
 - ✅ Error messages แยกชัดเจนตาม error code
 - ✅ แสดง normalized price พร้อมคำอธิบาย
 - ✅ แสดงสถานะ registry และคำแนะนำการตั้งค่า

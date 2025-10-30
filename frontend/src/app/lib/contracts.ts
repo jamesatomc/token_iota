@@ -4,7 +4,7 @@ export const CONTRACTS = {
   PACKAGE_ID: "0x365d048bce7d1984f5877632fe63695d44cf5eb56cf3e4085d9c6b20c9270b97",
   
   // Global Pool Registry ID (create once with create_registry function in DEX)
-  REGISTRY_ID: "0xddacbq5a444dfdcd69a0604df4b623932c1be656897455a4b775650aedc77474", // Paste your GlobalPoolRegistry object ID here after calling create_registry
+  REGISTRY_ID: "0x1f5d768ea83a87167057720503758676e48d5208596aab69af0fbb2113b6ef24", // Paste your GlobalPoolRegistry object ID here after calling create_registry
 
   // Global OrderBook Registry ID (create once with create_global_registry function in DeepBook)
   REGISTRY_BOOK_ID: "0x0daedd92736893213e895d660dc1300ec85ab35557f09e4a6764430f80c51fe0", // Paste your GlobalOrderBookRegistry object ID here after calling create_global_registry

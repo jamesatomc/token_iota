@@ -3,9 +3,11 @@
 ## 🎯 ฟีเจอร์ที่เพิ่มมา
 
 ### 1. **OrderBookView Component** 📊
+
 แสดงรายการ orders ทั้งหมดใน order book พร้อมความสามารถในการยกเลิก
 
 **ฟีเจอร์:**
+
 - ✅ แสดง Bids (Buy orders) และ Asks (Sell orders) แยกกัน
 - ✅ แสดงข้อมูล order: ID, Price, Quantity, Filled amount
 - ✅ Highlight orders ของตัวเอง (สีฟ้า พร้อม badge "YOU")
@@ -15,15 +17,18 @@
 - ✅ แสดง Summary: Total Bids, Total Asks, My Bids, My Asks
 
 **การใช้งาน:**
+
 1. สร้างหรือเลือก Order Book
 2. Component จะแสดงอัตโนมัติด้านล่าง
 3. กด "My Orders" เพื่อดูเฉพาะ orders ของตัวเอง
 4. กด "❌ Cancel" เพื่อยกเลิก order (คืนเงินทันที)
 
 ### 2. **QuickTrade Component** ⚡
+
 ซื้อ/ขายแบบด่วนที่ราคาตลาด (market order)
 
 **ฟีเจอร์:**
+
 - ✅ ปุ่ม Buy/Sell แยกชัดเจน (เขียว/แดง)
 - ✅ แสดง Best Ask (สำหรับ buy) หรือ Best Bid (สำหรับ sell)
 - ✅ คำนวณ Estimated Total อัตโนมัติ
@@ -31,15 +36,18 @@
 - ✅ Execute ทันทีที่ราคาดีที่สุด
 
 **การใช้งาน:**
+
 1. เลือก Buy หรือ Sell
 2. ใส่ Quantity
 3. ดู Estimated Total
 4. กด "Buy Now" หรือ "Sell Now"
 
 ### 3. **Cancel Order Function** ❌
+
 ยกเลิก limit order และคืนเงินที่ lock ไว้
 
 **วิธีการ:**
+
 - ใน OrderBookView หา order ของตัวเอง
 - กดปุ่ม "❌ Cancel"
 - ยืนยัน
@@ -50,6 +58,7 @@
 ### OrderBookView.tsx
 
 **Props:**
+
 ```typescript
 {
   bookId: string;           // OrderBook object ID
@@ -61,6 +70,7 @@
 ```
 
 **State Management:**
+
 - `bids: Order[]` - รายการ buy orders
 - `asks: Order[]` - รายการ sell orders
 - `loading: boolean` - สถานะการโหลด
@@ -68,11 +78,13 @@
 - `showMyOrders: boolean` - toggle แสดงเฉพาะ orders ของตัวเอง
 
 **Data Fetching:**
+
 - ดึงข้อมูลจาก OrderBook object ผ่าน `client.getObject()`
 - Parse `fields.bids` และ `fields.asks`
 - Auto-refresh ทุก 10 วินาที
 
 **Cancel Logic:**
+
 ```typescript
 tx.moveCall({
   target: "PACKAGE::DeepBook::cancel_order",
@@ -87,6 +99,7 @@ tx.moveCall({
 ### QuickTrade.tsx
 
 **Props:**
+
 ```typescript
 {
   bookId: string;
@@ -100,6 +113,7 @@ tx.moveCall({
 ```
 
 **Market Order Logic:**
+
 - **Buy:** Place bid ที่ราคา `bestAskPrice` (ราคาขายที่ต่ำที่สุด)
   - จะ match ทันทีกับ sell orders ที่มีอยู่
   - รวม 1% buffer: `requiredQuote * 101 / 100`
@@ -110,12 +124,14 @@ tx.moveCall({
 ### DeepBookInterface.tsx Updates
 
 **New State:**
+
 ```typescript
 const [bestBidPrice, setBestBidPrice] = useState<string | undefined>();
 const [bestAskPrice, setBestAskPrice] = useState<string | undefined>();
 ```
 
 **Best Price Fetching:**
+
 - ดึงทุก 10 วินาที
 - อ่านจาก `fields.bids[0].price` และ `fields.asks[0].price`
 - ส่งให้ QuickTrade component
@@ -140,12 +156,14 @@ DeepBookInterface
 ## 🎨 Visual Design
 
 ### OrderBookView
+
 - **Bids (Buy):** 🟢 สีเขียว
 - **Asks (Sell):** 🔴 สีแดง
 - **My Orders:** สีฟ้า พร้อม badge "YOU"
 - **Cancel Button:** สีแดงอ่อน
 
 ### QuickTrade
+
 - **Buy Mode:** ปุ่มเขียว, แสดง Best Ask
 - **Sell Mode:** ปุ่มแดง, แสดง Best Bid
 - **Estimated Total:** กล่องสีฟ้า
@@ -153,18 +171,21 @@ DeepBookInterface
 ## 🧪 Testing Steps
 
 ### 1. Test Order Book Display
+
 - [ ] สร้าง order book
 - [ ] Place บาง orders (ทั้ง bid และ ask)
 - [ ] ตรวจสอบว่า OrderBookView แสดงผลถูกต้อง
 - [ ] ทดสอบ Auto-refresh (รอ 10 วินาที)
 
 ### 2. Test My Orders Filter
+
 - [ ] Place orders จาก account ของตัวเอง
 - [ ] กด "My Orders" toggle
 - [ ] ตรวจสอบว่าแสดงเฉพาะ orders ของตัวเอง
 - [ ] ตรวจสอบว่ามี badge "YOU"
 
 ### 3. Test Cancel Order
+
 - [ ] Place limit order (bid หรือ ask)
 - [ ] หา order ใน OrderBookView
 - [ ] กด "❌ Cancel"
@@ -173,6 +194,7 @@ DeepBookInterface
 - [ ] ตรวจสอบว่า order หายจาก list
 
 ### 4. Test Quick Trade (Buy)
+
 - [ ] มี sell orders ใน book
 - [ ] เลือก "Buy" ใน QuickTrade
 - [ ] ใส่ quantity
@@ -182,6 +204,7 @@ DeepBookInterface
 - [ ] ตรวจสอบ balance เปลี่ยน
 
 ### 5. Test Quick Trade (Sell)
+
 - [ ] มี buy orders ใน book
 - [ ] เลือก "Sell" ใน QuickTrade
 - [ ] ใส่ quantity
@@ -193,12 +216,14 @@ DeepBookInterface
 ## 🐛 Error Handling
 
 ### Cancel Order Errors
+
 ```typescript
 E_ORDER_NOT_FOUND:  "Order not found (อาจถูก fill หรือยกเลิกแล้ว)"
 E_UNAUTHORIZED:     "Unauthorized (ยกเลิกได้แค่ order ของตัวเองเท่านั้น)"
 ```
 
 ### Quick Trade Errors
+
 ```typescript
 "No sell orders available":  ไม่มี ask orders ให้ match (สำหรับ buy)
 "No buy orders available":   ไม่มี bid orders ให้ match (สำหรับ sell)
@@ -209,20 +234,24 @@ E_UNAUTHORIZED:     "Unauthorized (ยกเลิกได้แค่ order �
 ## 💡 Tips & Best Practices
 
 ### 1. Limit Orders vs Quick Trade
+
 - **Limit Order:** ใช้เมื่อต้องการควบคุมราคาแน่นอน, อาจไม่ execute ทันที
 - **Quick Trade:** ใช้เมื่อต้องการ execute ทันทีที่ราคาตลาด
 
 ### 2. Cancel Strategy
+
 - Cancel orders เมื่อราคาตลาดเปลี่ยนไป
 - Cancel partially filled orders ถ้าไม่ต้องการ fill ส่วนที่เหลือ
 - ไม่มีค่าธรรมเนียมในการ cancel
 
 ### 3. Slippage Buffer
+
 - Quick Trade รวม 1% buffer
 - ถ้าราคาเปลี่ยนมากกว่า 1% อาจ fail
 - สามารถปรับ buffer ได้ใน code
 
 ### 4. Gas Optimization
+
 - Merge coins ก่อน split (ลด transaction size)
 - Cancel หลาย orders ใน 1 transaction ถ้าต้องการ (ต้อง batch)
 
@@ -247,6 +276,7 @@ E_UNAUTHORIZED:     "Unauthorized (ยกเลิกได้แค่ order �
 ## 🎯 Summary
 
 ตอนนี้ DeepBook UI มี:
+
 1. ✅ Create order books (with registry)
 2. ✅ Place limit orders (bid/ask)
 3. ✅ **View all orders (new!)**
