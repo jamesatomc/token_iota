@@ -75,7 +75,7 @@ export default function Home() {
 
         {/* Content Area */}
         <div className="flex flex-col md:flex-row justify-center gap-6">
-          <div className="w-full md:w-auto md:shrink-0">
+          <div className="w-full md:flex-1">
             {activeTab === "swap" && <SwapInterface />}
             {activeTab === "liquidity" && <LiquidityInterface />}
             {activeTab === "mint" && <MintKanari />}

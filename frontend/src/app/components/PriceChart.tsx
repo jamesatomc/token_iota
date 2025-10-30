@@ -12,9 +12,43 @@ type Props = {
 
 // A tiny, dependency-free SVG sparkline. Expects numeric prices.
 export default function PriceChart({ data, width = 300, height = 60, stroke = "#2563eb", fill = "rgba(37,99,235,0.08)" }: Props) {
+
+  // Use responsive SVG that fills its container. We'll measure container width when mounted.
+  const gradId = `spark_grad_${React.useId()}`;
+  const [hoverIndex, setHoverIndex] = React.useState<number | null>(null);
+  const containerRef = React.useRef<HTMLDivElement | null>(null);
+  const [containerWidth, setContainerWidth] = React.useState<number | null>(null);
+
+  // Resize observer to update width for responsive rendering
+  React.useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+
+    // If ResizeObserver is available, use it with proper typings.
+    if (typeof ResizeObserver !== "undefined") {
+      const ro = new ResizeObserver((entries: ResizeObserverEntry[]) => {
+        for (const entry of entries) {
+          const rect = entry.contentRect;
+          const w = rect?.width ?? el.clientWidth;
+          setContainerWidth(Math.max(20, Math.floor(w)));
+        }
+      });
+      ro.observe(el);
+      // initial
+      setContainerWidth(Math.max(20, el.clientWidth || width));
+      return () => ro.disconnect();
+    }
+
+    // Fallback for environments without ResizeObserver
+    const onResize = () => setContainerWidth(Math.max(20, el.clientWidth || width));
+    window.addEventListener("resize", onResize);
+    onResize();
+    return () => window.removeEventListener("resize", onResize);
+  }, [width]);
+
   if (!data || data.length === 0) {
     return (
-      <div style={{ width, height, display: "flex", alignItems: "center", justifyContent: "center", color: "#6b7280", fontSize: 12 }}>
+      <div ref={containerRef} style={{ width: '100%', height, display: "flex", alignItems: "center", justifyContent: "center", color: "#6b7280", fontSize: 12 }}>
         No data
       </div>
     );
@@ -38,7 +72,7 @@ export default function PriceChart({ data, width = 300, height = 60, stroke = "#
 
   // Map points to svg coords
   const pad = 4;
-  const w = Math.max(20, width);
+  const w = Math.max(20, containerWidth || width);
   const h = Math.max(12, height);
   const innerW = w - pad * 2;
   const innerH = h - pad * 2;
@@ -55,11 +89,6 @@ export default function PriceChart({ data, width = 300, height = 60, stroke = "#
   // Area path (closed)
   const areaD = points.length > 0 ? `${pathD} L ${pad + innerW},${pad + innerH} L ${pad},${pad + innerH} Z` : "";
 
-  const gradId = React.useMemo(() => `spark_grad_${Math.floor(Math.random() * 1e9)}`, []);
-
-  // Hover state for tooltip and marker
-  const [hoverIndex, setHoverIndex] = React.useState<number | null>(null);
-  const containerRef = React.useRef<HTMLDivElement | null>(null);
 
   const handleMouseMove = (e: React.MouseEvent<SVGSVGElement>) => {
     const svg = e.currentTarget;

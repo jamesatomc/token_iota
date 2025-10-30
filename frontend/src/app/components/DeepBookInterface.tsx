@@ -30,7 +30,7 @@ export default function DeepBookInterface() {
   const [price, setPrice] = useState(""); // normalized u64 string
   const [quantity, setQuantity] = useState("");
   const [loadingOrder, setLoadingOrder] = useState(false);
-  
+
   // Best bid/ask prices for quick trade
   const [bestBidPrice, setBestBidPrice] = useState<string | undefined>();
   const [bestAskPrice, setBestAskPrice] = useState<string | undefined>();
@@ -59,10 +59,23 @@ export default function DeepBookInterface() {
     return t && typeof t.decimals === "number" ? t.decimals : 9;
   };
 
-  // helper: robustly extract numeric amount from a coin object returned by client.getCoins
-  const extractCoinValue = (coin: any): bigint | null => {
+  // helper: convert bigint token amount to a human string with trailing zeros trimmed
+  const humanizeAmount = (amt: bigint | null | undefined, decimals: number) => {
+    if (amt === null || amt === undefined) return "";
+    try {
+      const s = formatAmount(amt, decimals);
+      // trim trailing zeros and optional decimal point
+      return s.replace(/\.?0+$/, "");
+    } catch {
+      return "";
+    }
+  };
+
+  // helper: robustly extract numeric amount from a coin-like object returned by client.getCoins
+  type CoinLike = { amount?: string | number | bigint; balance?: string | number; value?: string | number; coinAmount?: string | number; amountMicro?: string | number } | null | undefined;
+  const extractCoinValue = useCallback((coin: CoinLike): bigint | null => {
     if (!coin) return null;
-    const maybe = coin.amount ?? coin.balance ?? coin.value ?? coin.coinAmount ?? coin.amountMicro ?? null;
+    const maybe = (coin as CoinLike)?.amount ?? (coin as CoinLike)?.balance ?? (coin as CoinLike)?.value ?? (coin as CoinLike)?.coinAmount ?? (coin as CoinLike)?.amountMicro ?? null;
     if (maybe === null || maybe === undefined) return null;
     try {
       // many SDKs return string or number
@@ -73,7 +86,7 @@ export default function DeepBookInterface() {
       return null;
     }
     return null;
-  };
+  }, []);
 
   // fetch balances for selected base and quote tokens
   useEffect(() => {
@@ -109,8 +122,8 @@ export default function DeepBookInterface() {
         if (!mounted) return;
         setBaseBalance(bSum);
         setQuoteBalance(qSum);
-      } catch (e) {
-        console.warn("Failed to fetch balances", e);
+      } catch {
+        console.warn("Failed to fetch balances");
         if (mounted) {
           setBaseBalance(null);
           setQuoteBalance(null);
@@ -124,7 +137,7 @@ export default function DeepBookInterface() {
       mounted = false;
       clearInterval(iv);
     };
-  }, [currentAccount, client, baseToken, quoteToken]);
+  }, [currentAccount, client, baseToken, quoteToken, extractCoinValue]);
 
   // Fetch best bid/ask prices for quick trade
   useEffect(() => {
@@ -144,7 +157,7 @@ export default function DeepBookInterface() {
         });
 
         if (obj?.data?.content && "fields" in obj.data.content) {
-          const fields = obj.data.content.fields as any;
+          const fields = obj.data.content.fields as unknown as Record<string, unknown>;
 
           // Get best bid (first element of bids array, highest price)
           const bidsData = fields.bids || [];
@@ -187,7 +200,7 @@ export default function DeepBookInterface() {
               } else if (askBig !== undefined) {
                 mid = Number(askBig) / priceScale;
               }
-            } catch (e) {
+            } catch {
               // fallback to Number parsing if BigInt fails for any reason
               const bidNum = bidRaw !== undefined ? Number(bidRaw.toString()) : undefined;
               const askNum = askRaw !== undefined ? Number(askRaw.toString()) : undefined;
@@ -202,7 +215,7 @@ export default function DeepBookInterface() {
                 return next.slice(-60);
               });
             }
-          } catch (e) {
+          } catch {
             // ignore history capture errors
           }
         }
@@ -224,7 +237,7 @@ export default function DeepBookInterface() {
     const fetchRegisteredPairs = async () => {
       const registryId = CONTRACTS.REGISTRY_BOOK_ID;
       console.log("🔍 Checking registry:", registryId);
-      
+
       if (!registryId || registryId.trim() === "") {
         console.log("❌ No registry ID configured");
         return;
@@ -233,24 +246,34 @@ export default function DeepBookInterface() {
       setLoadingPairs(true);
       try {
         console.log("📡 Fetching registry object...");
-        
+
         // First, get the registry object to see its structure
         const registryObjInfo = await client.getObject({
           id: registryId,
           options: { showContent: true, showType: true },
         });
-        
+
         console.log("📦 Registry object:", JSON.stringify(registryObjInfo, null, 2));
 
         // Check if registry has the 'books' table field
         let booksTableId = null;
         if (registryObjInfo?.data?.content && "fields" in registryObjInfo.data.content) {
-          const registryFields = registryObjInfo.data.content.fields as any;
+          const registryFields = registryObjInfo.data.content.fields as unknown as Record<string, unknown>;
           console.log("📚 Registry fields:", registryFields);
           if (registryFields.books) {
             // Books is a Table object, extract its ID
-            if (typeof registryFields.books === 'object' && registryFields.books.fields) {
-              booksTableId = registryFields.books.fields.id?.id || registryFields.books.fields.id;
+            if (typeof registryFields.books === 'object' && 'fields' in (registryFields.books as object)) {
+              // Safe access: cast to unknown then inspect properties in a type-safe manner
+              const bfUnknown = registryFields.books as unknown;
+              if (typeof bfUnknown === 'object' && bfUnknown !== null) {
+                const bfRec = bfUnknown as Record<string, unknown>;
+                const fieldsObj = bfRec.fields as Record<string, unknown> | undefined;
+                if (fieldsObj) {
+                  const idObj = fieldsObj.id as Record<string, unknown> | string | undefined;
+                  if (typeof idObj === 'string') booksTableId = idObj;
+                  else if (typeof idObj === 'object' && idObj !== null) booksTableId = (idObj as Record<string, unknown>).id as string | undefined || null;
+                }
+              }
             } else if (typeof registryFields.books === 'string') {
               booksTableId = registryFields.books;
             }
@@ -267,7 +290,7 @@ export default function DeepBookInterface() {
 
         console.log("📋 Dynamic fields result:", JSON.stringify(registryObj, null, 2));
         console.log("📊 Number of fields:", registryObj?.data?.length || 0);
-        
+
         if (!registryObj?.data || registryObj.data.length === 0) {
           console.log("❗ Registry is empty. Make sure you:");
           console.log("   1. Use the latest Package ID:", CONTRACTS.PACKAGE_ID);
@@ -282,7 +305,7 @@ export default function DeepBookInterface() {
           for (const field of registryObj.data) {
             try {
               console.log("🔑 Processing field:", field);
-              
+
               // Get the dynamic field object which contains the book address
               // Use the books table ID as parent, not the registry ID
               const fieldObj = await client.getDynamicFieldObject({
@@ -296,9 +319,10 @@ export default function DeepBookInterface() {
 
               // Try to extract book address from field object
               if (fieldObj?.data?.content && "fields" in fieldObj.data.content) {
-                const fields = fieldObj.data.content.fields as any;
-                bookAddress = fields.value || fields.book_id || fields.id;
-              } 
+                const fields = fieldObj.data.content.fields as unknown as Record<string, unknown>;
+                // Extract common string-valued fields
+                bookAddress = (fields.value as string) || (fields.book_id as string) || (fields.id as string) || null;
+              }
               // If field object query failed, try to extract from objectId
               else if (fieldObj?.data?.objectId) {
                 bookAddress = fieldObj.data.objectId;
@@ -307,15 +331,15 @@ export default function DeepBookInterface() {
               else if (field.objectId) {
                 bookAddress = field.objectId;
               }
-              
+
               console.log("📘 Book address:", bookAddress);
-              
+
               if (!bookAddress) {
                 console.warn("⚠️ No book address found, skipping field");
                 console.warn("Field data:", JSON.stringify(field, null, 2));
                 continue;
               }
-              
+
               // Get the book object to extract token types
               const bookObj = await client.getObject({
                 id: bookAddress,
@@ -327,15 +351,15 @@ export default function DeepBookInterface() {
               if (bookObj?.data?.type) {
                 const typeStr = bookObj.data.type as string;
                 console.log("🏷️ Type string:", typeStr);
-                
+
                 // Parse type: "0xPACKAGE::DeepBook::OrderBook<BASE_TYPE, QUOTE_TYPE>"
                 const match = typeStr.match(/<(.+),\s*(.+)>/);
-                
+
                 if (match && match[1] && match[2]) {
                   const baseType = match[1].trim();
                   const quoteType = match[2].trim();
                   console.log("✅ Parsed types:", { baseType, quoteType });
-                  
+
                   // Get symbols
                   const getSymbol = (type: string) => {
                     const token = DEFAULT_TOKENS.find((t) => t.type === type);
@@ -349,7 +373,7 @@ export default function DeepBookInterface() {
                     baseSymbol: getSymbol(baseType),
                     quoteSymbol: getSymbol(quoteType),
                   };
-                  
+
                   console.log("✨ Added pair:", pair);
                   pairs.push(pair);
                 } else {
@@ -513,14 +537,14 @@ export default function DeepBookInterface() {
                 setBookId(found);
                 setBookSelect(found);
                 const useRegistry = CONTRACTS.REGISTRY_BOOK_ID && CONTRACTS.REGISTRY_BOOK_ID.trim() !== "";
-                
+
                 // Trigger re-fetch of registered pairs by updating lastCreatedId
                 // The useEffect will automatically re-run
                 setTimeout(() => {
                   console.log("🔄 Triggering pairs refresh after order book creation...");
                   setLoadingPairs(true);
                 }, 2000);
-                
+
                 alert(`✅ ${useRegistry ? 'Order book ready' : 'Order book created'}\n\nBook ID: ${found}\n\n${useRegistry ? '(Retrieved from registry or newly created)\n\nRefreshing trading pairs list...' : '(Newly created - not registered)'}`);
               } else {
                 alert("⚠️ Transaction submitted but could not auto-detect book ID.\n\nPlease:\n1. Check the transaction in IOTA Explorer\n2. Find the OrderBookCreated event or created object\n3. Copy the book_id / object ID\n4. Paste it into the OrderBook ID field below");
@@ -533,7 +557,7 @@ export default function DeepBookInterface() {
           onError: (e) => {
             console.error("create_order_book error:", e);
             const errStr = String(e);
-            
+
             // Parse common errors
             if (errStr.includes("E_SAME_TOKEN_PAIR")) {
               alert("❌ Invalid token pair!\n\nBase token and Quote token cannot be the same.\n\nPlease select different tokens for your trading pair.");
@@ -577,16 +601,16 @@ export default function DeepBookInterface() {
     try {
       const tx = new Transaction();
 
-  // convert price and quantity to u64 values expected by Move
-  // price is expected as normalized integer (price * PRICE_SCALE). In UI we expect user to supply normalized integer string or simple numeric — we accept raw string and attempt to parse as integer.
-  const priceU64 = BigInt(price);
-  // quantity may be entered as a decimal (e.g. 0.1). Parse to smallest units using base token decimals.
-  const baseDecimals = getDecimals(baseToken);
-  const quoteDecimals = getDecimals(quoteToken);
-  const quantityU64 = BigInt(parseAmount(quantity, baseDecimals));
+      // convert price and quantity to u64 values expected by Move
+      // price is expected as normalized integer (price * PRICE_SCALE). In UI we expect user to supply normalized integer string or simple numeric — we accept raw string and attempt to parse as integer.
+      const priceU64 = BigInt(price);
+      // quantity may be entered as a decimal (e.g. 0.1). Parse to smallest units using base token decimals.
+      const baseDecimals = getDecimals(baseToken);
+      const quoteDecimals = getDecimals(quoteToken);
+      const quantityU64 = BigInt(parseAmount(quantity, baseDecimals));
 
       // Build coin input depending on side
-  if (side === "bid") {
+      if (side === "bid") {
         // payment: Coin<Quote> (quote token provided by taker). If quote is IOTA, split from gas.
         let coinIn;
         if (quoteToken === CONTRACTS.IOTA.TYPE) {
@@ -669,7 +693,7 @@ export default function DeepBookInterface() {
           console.log("place order success", r);
           const orderType = side === "bid" ? "Buy" : "Sell";
           alert(`✅ ${orderType} order submitted!\n\nQuantity: ${quantity}\nPrice: ${humanPrice || price}\n\nCheck transaction in IOTA Explorer for:\n• OrderPlaced event (if resting)\n• OrderMatched event (if filled)\n• Your updated balance`);
-          
+
           // Clear form
           setHumanPrice("");
           setPrice("");
@@ -678,7 +702,7 @@ export default function DeepBookInterface() {
         onError: (e) => {
           console.error("place order error:", e);
           const errStr = String(e);
-          
+
           // Parse common errors
           if (errStr.includes("E_INSUFFICIENT_LIQUIDITY")) {
             alert(`❌ Insufficient ${side === "bid" ? "quote" : "base"} token balance!\n\nYou need ${side === "bid" ? "quote (payment)" : "base"} tokens to place this order.\n\nCheck your wallet balance.`);
@@ -704,8 +728,8 @@ export default function DeepBookInterface() {
   }, [signAndExecute, client, currentAccount, bookId, baseToken, quoteToken, price, quantity, side, humanPrice]);
 
   return (
-    <div className="min-h-[420px] w-full max-w-2xl">
-      <Card maxWidth="max-w-2xl" className="mx-auto">
+    <div className="min-h-[420px] w-full max-w-6xl mx-auto px-4">
+      <Card maxWidth="max-w-6xl" className="mx-auto">
         <div className="flex items-center justify-between mb-4">
           <div className="flex-1">
             <h2 className="text-2xl font-bold text-gray-900">DeepBook</h2>
@@ -725,8 +749,8 @@ export default function DeepBookInterface() {
             <button type="button" onClick={() => setShowSelectorBase(true)} className="mt-2 w-full flex items-center justify-between px-4 py-3 rounded-xl border border-gray-200 bg-white">
               <div className="min-w-0">
                 <div className="font-semibold text-gray-900">{baseToken.split("::").pop()}</div>
-                    <div className="text-xs text-gray-500 truncate" title={baseToken}>{baseToken}</div>
-                    <div className="text-xs text-gray-500 mt-1">Balance: <span className="font-mono">{baseBalance !== null ? formatAmount(baseBalance, getDecimals(baseToken)) : "-"}</span></div>
+                <div className="text-xs text-gray-500 truncate" title={baseToken}>{baseToken}</div>
+                <div className="text-xs text-gray-500 mt-1">Balance: <span className="font-mono">{baseBalance !== null ? formatAmount(baseBalance, getDecimals(baseToken)) : "-"}</span></div>
               </div>
               <div className="text-xs text-gray-500">Select</div>
             </button>
@@ -823,7 +847,7 @@ export default function DeepBookInterface() {
           <div className="mb-4 p-3 rounded-xl bg-green-50 border border-green-200">
             <div className="flex items-center justify-between">
               <div className="text-sm text-green-700">
-                ✅ Found <strong>{registeredPairs.length}</strong> registered trading pair{registeredPairs.length > 1 ? 's' : ''} in registry
+                {`✅ Found ${registeredPairs.length} registered trading pair${registeredPairs.length > 1 ? 's' : ''} in registry`}
               </div>
               <button
                 onClick={() => {
@@ -860,7 +884,7 @@ export default function DeepBookInterface() {
                 <strong>Registry ID:</strong> <code className="bg-gray-100 px-1 rounded">{CONTRACTS.REGISTRY_BOOK_ID.slice(0, 10)}...{CONTRACTS.REGISTRY_BOOK_ID.slice(-8)}</code>
               </div>
               <div className="text-xs text-gray-500">
-                💡 Create an order book above using "Get or Create Order Book", then click Refresh. Check browser console (F12) for detailed logs.
+                💡 Create an order book above using &quot;Get or Create Order Book&quot;, then click Refresh. Check browser console (F12) for detailed logs.
               </div>
             </div>
           </div>
@@ -895,7 +919,7 @@ export default function DeepBookInterface() {
                 className="w-full px-4 py-3 rounded-xl border border-gray-200 bg-white"
               >
                 <option value="">Select a book...</option>
-                
+
                 {/* Show registered pairs from registry */}
                 {registeredPairs.length > 0 && (
                   <optgroup label="📋 Registered Pairs">
@@ -948,7 +972,7 @@ export default function DeepBookInterface() {
                           <div className="font-bold mb-1">
                             Selected Pair: {pair.baseSymbol}/{pair.quoteSymbol}
                           </div>
-                          <div className="font-mono text-blue-600">
+                          <div className="font-mono text-blue-600 break-all max-w-full whitespace-normal">
                             Book ID: {pair.bookId}
                           </div>
                         </div>
@@ -961,7 +985,7 @@ export default function DeepBookInterface() {
 
               {lastCreatedId && bookSelect !== "manual" && (
                 <div className="mt-2 flex items-center gap-2">
-                  <div className="text-xs text-green-700 font-mono break-all">{lastCreatedId}</div>
+                  <div className="text-xs text-green-700 font-mono break-all max-w-full whitespace-normal">{lastCreatedId}</div>
                   <button
                     onClick={() => {
                       setBookSelect(lastCreatedId);
@@ -1013,9 +1037,45 @@ export default function DeepBookInterface() {
               Quantity (base)
               <span className="text-xs text-gray-400" title="Amount of base token to buy/sell (decimal allowed)">ⓘ</span>
             </label>
-            <input value={quantity} onChange={(e) => setQuantity(e.target.value)} placeholder="e.g. 100 or 0.5" className="mt-2 w-full px-4 py-3 rounded-xl border border-gray-200 bg-white" />
-            <div className="text-xs text-gray-400 mt-1">
-              in {baseToken.split("::").pop()} tokens
+            <div className="mt-2">
+              <input value={quantity} onChange={(e) => setQuantity(e.target.value)} placeholder="e.g. 100 or 0.5" className="w-full px-4 py-3 rounded-xl border border-gray-200 bg-white" />
+
+              <div className="mt-2 flex items-center justify-between">
+                <div className="text-xs text-gray-500">in {baseToken.split("::").pop()} tokens</div>
+                <div className="flex items-center gap-2">
+                  <div className="text-xs text-gray-500">Available: <span className="font-mono">{baseBalance !== null ? humanizeAmount(baseBalance, getDecimals(baseToken)) : '-'}</span></div>
+                  <div className="flex items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (!baseBalance) return;
+                        const dec = getDecimals(baseToken);
+                        // 50% of baseBalance in human units
+                        const human = Number(formatAmount(baseBalance, dec));
+                        const half = (human / 2).toString();
+                        setQuantity(half);
+                      }}
+                      disabled={!baseBalance}
+                      className="px-2 py-1 text-xs bg-gray-100 rounded-lg disabled:opacity-50"
+                    >
+                      50%
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (!baseBalance) return;
+                        const dec = getDecimals(baseToken);
+                        const human = Number(formatAmount(baseBalance, dec));
+                        setQuantity(human.toString());
+                      }}
+                      disabled={!baseBalance}
+                      className="px-2 py-1 text-xs bg-gray-100 rounded-lg disabled:opacity-50"
+                    >
+                      100%
+                    </button>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
 
@@ -1068,10 +1128,11 @@ export default function DeepBookInterface() {
           <div className="p-4 rounded-xl bg-white border border-gray-100">
             <div className="flex items-center justify-between mb-3">
               <div className="text-sm font-medium text-gray-700">Price (mid)</div>
-              <div className="text-xs text-gray-500">{priceHistory.length > 0 ? `${priceHistory[priceHistory.length-1].price.toLocaleString(undefined, { maximumFractionDigits: 6 })} (human)` : '-'}</div>
+              <div className="text-xs text-gray-500">{priceHistory.length > 0 ? `${priceHistory[priceHistory.length - 1].price.toLocaleString(undefined, { maximumFractionDigits: 6 })} (human)` : '-'}</div>
             </div>
-            <div style={{ width: '100%', maxWidth: 720 }}>
-              <PriceChart data={priceHistory} width={720} height={96} />
+            {/* Responsive chart container: chart will fill available width */}
+            <div style={{ width: '100%' }}>
+              <PriceChart data={priceHistory} height={96} />
             </div>
           </div>
           {/* Quick Trade */}
@@ -1091,7 +1152,6 @@ export default function DeepBookInterface() {
             baseToken={baseToken}
             quoteToken={quoteToken}
             baseDecimals={getDecimals(baseToken)}
-            quoteDecimals={getDecimals(quoteToken)}
           />
         </div>
       ) : null}

@@ -22,7 +22,6 @@ interface OrderBookViewProps {
   baseToken: string;
   quoteToken: string;
   baseDecimals?: number;
-  quoteDecimals?: number;
 }
 
 export default function OrderBookView({
@@ -30,7 +29,6 @@ export default function OrderBookView({
   baseToken,
   quoteToken,
   baseDecimals = 9,
-  quoteDecimals = 9,
 }: OrderBookViewProps) {
   const [bids, setBids] = useState<Order[]>([]);
   const [asks, setAsks] = useState<Order[]>([]);
@@ -55,35 +53,72 @@ export default function OrderBookView({
       });
 
       if (obj?.data?.content && "fields" in obj.data.content) {
-        const fields = obj.data.content.fields as any;
+        const fields = (obj.data.content as { fields?: unknown }).fields as
+          | Record<string, unknown>
+          | undefined;
+
+        const safeArray = (v: unknown): unknown[] => (Array.isArray(v) ? v : []);
+
+        const toStr = (v: unknown): string | undefined => {
+          if (v === null || v === undefined) return undefined;
+          if (typeof v === "string") return v;
+          if (typeof v === "number" || typeof v === "boolean" || typeof v === "bigint") return String(v);
+          if (typeof v === "object") {
+            try {
+              const maybe = v as { toString?: () => string };
+              if (typeof maybe.toString === "function") return maybe.toString();
+            } catch {
+              return undefined;
+            }
+          }
+          return undefined;
+        };
 
         // Parse bids
-        const bidsData = fields.bids || [];
-        const parsedBids: Order[] = Array.isArray(bidsData)
-          ? bidsData.map((bid: any) => ({
-              id: bid.id?.toString() || bid.fields?.id?.toString() || "0",
-              maker: bid.maker || bid.fields?.maker || "",
-              is_bid: true,
-              price: bid.price?.toString() || bid.fields?.price?.toString() || "0",
-              quantity: bid.quantity?.toString() || bid.fields?.quantity?.toString() || "0",
-              filled: bid.filled?.toString() || bid.fields?.filled?.toString() || "0",
-              locked_amount: bid.locked_amount?.toString() || bid.fields?.locked_amount?.toString() || "0",
-            }))
-          : [];
+        const bidsData = safeArray(fields?.["bids"]);
+        const parsedBids: Order[] = bidsData.map((bid) => {
+          const b = bid as Record<string, unknown> | undefined;
+          const bFields = b?.["fields"] as Record<string, unknown> | undefined;
+          const id = toStr(b?.["id"]) || toStr(bFields?.["id"]) || "0";
+          const maker = toStr(b?.["maker"]) || toStr(bFields?.["maker"]) || "";
+          const price = toStr(b?.["price"]) || toStr(bFields?.["price"]) || "0";
+          const quantity = toStr(b?.["quantity"]) || toStr(bFields?.["quantity"]) || "0";
+          const filled = toStr(b?.["filled"]) || toStr(bFields?.["filled"]) || "0";
+          const locked_amount = toStr(b?.["locked_amount"]) || toStr(bFields?.["locked_amount"]) || "0";
+
+          return {
+            id,
+            maker,
+            is_bid: true,
+            price,
+            quantity,
+            filled,
+            locked_amount,
+          };
+        });
 
         // Parse asks
-        const asksData = fields.asks || [];
-        const parsedAsks: Order[] = Array.isArray(asksData)
-          ? asksData.map((ask: any) => ({
-              id: ask.id?.toString() || ask.fields?.id?.toString() || "0",
-              maker: ask.maker || ask.fields?.maker || "",
-              is_bid: false,
-              price: ask.price?.toString() || ask.fields?.price?.toString() || "0",
-              quantity: ask.quantity?.toString() || ask.fields?.quantity?.toString() || "0",
-              filled: ask.filled?.toString() || ask.fields?.filled?.toString() || "0",
-              locked_amount: ask.locked_amount?.toString() || ask.fields?.locked_amount?.toString() || "0",
-            }))
-          : [];
+        const asksData = safeArray(fields?.["asks"]);
+        const parsedAsks: Order[] = asksData.map((ask) => {
+          const a = ask as Record<string, unknown> | undefined;
+          const aFields = a?.["fields"] as Record<string, unknown> | undefined;
+          const id = toStr(a?.["id"]) || toStr(aFields?.["id"]) || "0";
+          const maker = toStr(a?.["maker"]) || toStr(aFields?.["maker"]) || "";
+          const price = toStr(a?.["price"]) || toStr(aFields?.["price"]) || "0";
+          const quantity = toStr(a?.["quantity"]) || toStr(aFields?.["quantity"]) || "0";
+          const filled = toStr(a?.["filled"]) || toStr(aFields?.["filled"]) || "0";
+          const locked_amount = toStr(a?.["locked_amount"]) || toStr(aFields?.["locked_amount"]) || "0";
+
+          return {
+            id,
+            maker,
+            is_bid: false,
+            price,
+            quantity,
+            filled,
+            locked_amount,
+          };
+        });
 
         setBids(parsedBids);
         setAsks(parsedAsks);
