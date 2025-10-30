@@ -8,6 +8,7 @@ import Card from "./UI/Card";
 import TokenSelector from "./TokenSelector";
 import OrderBookView from "./OrderBookView";
 import QuickTrade from "./QuickTrade";
+import PriceChart from "./PriceChart";
 
 export default function DeepBookInterface() {
   const [feeBps] = useState(30);
@@ -33,6 +34,9 @@ export default function DeepBookInterface() {
   // Best bid/ask prices for quick trade
   const [bestBidPrice, setBestBidPrice] = useState<string | undefined>();
   const [bestAskPrice, setBestAskPrice] = useState<string | undefined>();
+
+  // Price history (mid prices) for the selected book
+  const [priceHistory, setPriceHistory] = useState<Array<{ ts: number; price: number }>>([]);
 
   // Registered trading pairs from registry
   const [registeredPairs, setRegisteredPairs] = useState<Array<{
@@ -141,7 +145,7 @@ export default function DeepBookInterface() {
 
         if (obj?.data?.content && "fields" in obj.data.content) {
           const fields = obj.data.content.fields as any;
-          
+
           // Get best bid (first element of bids array, highest price)
           const bidsData = fields.bids || [];
           if (Array.isArray(bidsData) && bidsData.length > 0) {
@@ -160,6 +164,46 @@ export default function DeepBookInterface() {
             if (askPrice && mounted) setBestAskPrice(askPrice);
           } else if (mounted) {
             setBestAskPrice("0");
+          }
+
+          // capture mid price snapshot and append to history (convert from normalized u64 -> human float)
+          try {
+            const bidRaw = (Array.isArray(bidsData) && bidsData.length > 0) ? (bidsData[0]?.price ?? bidsData[0]?.fields?.price) : undefined;
+            const askRaw = (Array.isArray(asksData) && asksData.length > 0) ? (asksData[0]?.price ?? asksData[0]?.fields?.price) : undefined;
+
+            // Price scale (e.g. 1_000_000_000)
+            const priceScale = Number(DEEPBOOK.PRICE_SCALE as number) || 1;
+
+            let mid: number | undefined;
+            try {
+              const bidBig = bidRaw !== undefined ? BigInt(bidRaw.toString()) : undefined;
+              const askBig = askRaw !== undefined ? BigInt(askRaw.toString()) : undefined;
+
+              if (bidBig !== undefined && askBig !== undefined) {
+                const midBig = (bidBig + askBig) / BigInt(2);
+                mid = Number(midBig) / priceScale;
+              } else if (bidBig !== undefined) {
+                mid = Number(bidBig) / priceScale;
+              } else if (askBig !== undefined) {
+                mid = Number(askBig) / priceScale;
+              }
+            } catch (e) {
+              // fallback to Number parsing if BigInt fails for any reason
+              const bidNum = bidRaw !== undefined ? Number(bidRaw.toString()) : undefined;
+              const askNum = askRaw !== undefined ? Number(askRaw.toString()) : undefined;
+              if (bidNum !== undefined && askNum !== undefined) mid = (bidNum + askNum) / 2 / priceScale;
+              else if (bidNum !== undefined) mid = bidNum / priceScale;
+              else if (askNum !== undefined) mid = askNum / priceScale;
+            }
+
+            if (mid !== undefined && mounted) {
+              setPriceHistory((prev) => {
+                const next = prev.concat({ ts: Date.now(), price: mid! });
+                return next.slice(-60);
+              });
+            }
+          } catch (e) {
+            // ignore history capture errors
           }
         }
       } catch (err) {
@@ -1020,6 +1064,16 @@ export default function DeepBookInterface() {
       {/* Quick Trade & Order Book View */}
       {(bookId && bookId.trim() !== "") || (bookSelect && bookSelect !== "" && bookSelect !== "manual") ? (
         <div className="mt-6 space-y-6">
+          {/* Price Chart */}
+          <div className="p-4 rounded-xl bg-white border border-gray-100">
+            <div className="flex items-center justify-between mb-3">
+              <div className="text-sm font-medium text-gray-700">Price (mid)</div>
+              <div className="text-xs text-gray-500">{priceHistory.length > 0 ? `${priceHistory[priceHistory.length-1].price.toLocaleString(undefined, { maximumFractionDigits: 6 })} (human)` : '-'}</div>
+            </div>
+            <div style={{ width: '100%', maxWidth: 720 }}>
+              <PriceChart data={priceHistory} width={720} height={96} />
+            </div>
+          </div>
           {/* Quick Trade */}
           <QuickTrade
             bookId={bookId || bookSelect}
