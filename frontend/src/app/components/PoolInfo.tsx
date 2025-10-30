@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useMemo } from "react";
+import { usePools } from "../hooks/usePools";
 import { useCurrentAccount, useIotaClient, useSignAndExecuteTransaction } from "@iota/dapp-kit";
 import { formatAmount as rawFormatAmount, CONTRACTS, MODULES, DEX_FUNCTIONS } from "../lib/contracts";
 import Card from "./UI/Card";
@@ -49,33 +50,7 @@ const formatAmount = (v: unknown): string => {
 };
 
 export default function PoolInfo() {
-  // Auth gating for this page
-  const [passwordInput, setPasswordInput] = useState("");
-  const [isAuthed, setIsAuthed] = useState<boolean>(() => {
-    try {
-      return sessionStorage.getItem("poolInfo:authed") === "1";
-    } catch {
-      return false;
-    }
-  });
-
-  const pagePassword = (CONTRACTS as unknown as { POOL_INFO_PASSWORD?: string }).POOL_INFO_PASSWORD;
-
-  const handleUnlock = () => {
-    // If no password configured, allow access
-    if (!pagePassword || pagePassword.trim() === "") {
-      try { sessionStorage.setItem("poolInfo:authed", "1"); } catch {};
-      setIsAuthed(true);
-      return;
-    }
-
-    if (passwordInput === pagePassword) {
-      try { sessionStorage.setItem("poolInfo:authed", "1"); } catch {}
-      setIsAuthed(true);
-    } else {
-      alert("Incorrect password");
-    }
-  };
+  // (Removed page lock) Pool info is now always visible; password gating removed.
   const [poolId, setPoolId] = useState("");
   const [poolData, setPoolData] = useState<PoolData | null>(null);
   const [loading, setLoading] = useState(false);
@@ -93,6 +68,27 @@ export default function PoolInfo() {
   const client = useIotaClient();
   const currentAccount = useCurrentAccount();
   const { mutate: signAndExecute } = useSignAndExecuteTransaction();
+  const { pools: availablePools, loading: poolsLoading } = usePools();
+
+  const truncateId = (id: string, head = 8, tail = 6) => {
+    if (!id) return "";
+    if (id.length <= head + tail + 3) return id;
+    return `${id.slice(0, head)}...${id.slice(-tail)}`;
+  };
+
+  const copyToClipboard = async (text: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      // small feedback
+      // In this simple component we use alert for feedback to avoid adding toast deps
+      // but keep it subtle
+      // eslint-disable-next-line no-alert
+      alert("Pool ID copied to clipboard");
+    } catch (e) {
+      // eslint-disable-next-line no-alert
+      alert("Failed to copy");
+    }
+  };
 
   const fetchPoolInfo = async () => {
     if (!poolId) {
@@ -335,48 +331,72 @@ export default function PoolInfo() {
     <Card maxWidth="max-w-md" minHeight="min-h-[560px]" className="shadow-sm mx-auto w-full">
       <h2 className="text-2xl font-bold mb-6 text-gray-900">Pool Information</h2>
 
-      {/* Password gate: if not authed, show unlock UI */}
-      {!isAuthed && (
-        <div className="mb-4">
-          <label className="block text-sm font-medium mb-2 text-zinc-700">Enter password to view this page</label>
-          <div className="flex gap-2">
-            <input
-              type="password"
-              value={passwordInput}
-              onChange={(e) => setPasswordInput(e.target.value)}
-              className="flex-1 px-4 py-3 rounded-lg border border-gray-300 bg-white text-gray-900 focus:outline-none"
-            />
-            <button
-              onClick={handleUnlock}
-              className="px-4 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg"
-            >Unlock</button>
-          </div>
-          <p className="text-xs text-gray-500 mt-2">If no password is configured, the page is open. Configure <code className="font-mono">CONTRACTS.POOL_INFO_PASSWORD</code> to enable gating.</p>
-        </div>
-      )}
+      {/* Page lock removed — Pool info visible by default */}
 
       <div className="mb-4">
         <label className="block text-sm font-medium mb-2 text-zinc-700">
           Pool ID
         </label>
-        <div className="flex flex-col sm:flex-row gap-2">
-          <input
-            type="text"
-            value={poolId}
-            onChange={(e) => setPoolId(e.target.value)}
-            placeholder="0x..."
-            inputMode="text"
-            autoComplete="off"
-            spellCheck={false}
-            className="w-full px-4 py-3 rounded-lg border border-gray-300 bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-600 break-all"
-          />
-          <button
-            onClick={fetchPoolInfo}
-            disabled={loading || !poolId}
-            className="w-full sm:w-auto px-6 py-3 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-200 text-white font-medium rounded-lg transition-colors"
-          >
-            {loading ? "..." : "Fetch"}
-          </button>
+
+        {/* Dropdown to pick a pool (falls back to manual input) */}
+        <div className="flex flex-col gap-2">
+          <div className="flex flex-col sm:flex-row gap-2 items-center w-full">
+            <select
+              value={availablePools.find((p) => p.poolId === poolId) ? poolId : ""}
+              onChange={(e) => setPoolId(e.target.value)}
+              disabled={poolsLoading}
+              className="flex-1 w-full px-4 py-3 rounded-lg border border-gray-300 bg-white text-gray-900 focus:outline-none truncate sm:whitespace-nowrap"
+            >
+              <option value="">-- Choose a pool (or paste an ID below) --</option>
+              {availablePools.map((p) => (
+                <option key={p.poolId} value={p.poolId} title={p.poolId}>
+                  {`${p.tokenXSymbol ?? "X"}/${p.tokenYSymbol ?? "Y"} — ${truncateId(p.poolId)}`}
+                </option>
+              ))}
+            </select>
+
+            <button
+              onClick={fetchPoolInfo}
+              disabled={loading || !poolId}
+              className="w-full sm:w-auto px-6 py-3 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-200 text-white font-medium rounded-lg transition-colors"
+            >
+              {loading ? "..." : "Fetch"}
+            </button>
+          </div>
+
+          {/* If a known pool is selected, show a compact readonly badge + copy button. Otherwise show paste input. */}
+          {availablePools.find((p) => p.poolId === poolId) ? (
+            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 w-full">
+              <div className="w-full sm:w-auto px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm font-mono text-gray-700 truncate wrap-break-word">
+                {truncateId(poolId)}
+              </div>
+              <button
+                type="button"
+                onClick={() => copyToClipboard(poolId)}
+                className="w-full sm:w-auto px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm hover:bg-gray-50"
+              >
+                Copy
+              </button>
+              <button
+                type="button"
+                onClick={() => setPoolId("")}
+                className="w-full sm:w-auto px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm hover:bg-gray-50"
+              >
+                Clear
+              </button>
+            </div>
+          ) : (
+            <input
+              type="text"
+              value={poolId}
+              onChange={(e) => setPoolId(e.target.value)}
+              placeholder="Or paste pool ID (0x...)"
+              inputMode="text"
+              autoComplete="off"
+              spellCheck={false}
+              className="w-full px-4 py-3 rounded-lg border border-gray-300 bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-600 break-all"
+            />
+          )}
         </div>
       </div>
 

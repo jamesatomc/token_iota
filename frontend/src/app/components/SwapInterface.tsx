@@ -314,7 +314,11 @@ export default function SwapInterface() {
     try {
       const div = 10 ** decimals;
       const n = Number(raw) / div;
-      return n.toLocaleString(undefined, { maximumFractionDigits: maxFraction });
+      // Return a plain numeric string (no locale grouping) so values can be
+      // parsed back with parseFloat when the user switches directions or edits
+      // the amount. Trim trailing zeros.
+      const fixed = n.toFixed(maxFraction);
+      return fixed.replace(/\.?(?:0+)$/, "");
     } catch {
       // fallback
       return "0";
@@ -349,7 +353,8 @@ export default function SwapInterface() {
         return;
       }
 
-      const feeBps = Number(pool.feeBps || 50);
+      // use BigInt for fee arithmetic to avoid mixing number and bigint
+      const feeBps = BigInt(Number(pool.feeBps ?? 50));
       const BASIS = BigInt(10000);
 
       // set which side is in/out depending on direction
@@ -362,7 +367,7 @@ export default function SwapInterface() {
       }
 
       // amount_in_with_fee = rawIn * (BASIS - feeBps)
-      const amountInWithFee = rawIn * BigInt(BASIS - BigInt(feeBps));
+      const amountInWithFee = rawIn * (BASIS - feeBps);
 
       const numerator = amountInWithFee * balanceOut;
       const denominator = balanceIn * BASIS + amountInWithFee;
@@ -373,15 +378,9 @@ export default function SwapInterface() {
 
       const outRaw = numerator / denominator;
 
-      // format human output (special-case IOTA to show integer)
-      const toType = isXtoY ? pool.tokenY : pool.tokenX;
-      if (toType === CONTRACTS.IOTA.TYPE) {
-        // show integer IOTA units
-        const humanFloor = Number(outRaw / BigInt(1e9));
-        setAmountOut(String(humanFloor));
-      } else {
-        setAmountOut(humanFromRaw(outRaw, 9, 6));
-      }
+      // format human output (use decimal formatting for all tokens so
+      // small IOTA outputs < 1 are visible instead of rounding to 0)
+      setAmountOut(humanFromRaw(outRaw, 9, 6));
     };
 
     try {

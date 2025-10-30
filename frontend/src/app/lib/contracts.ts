@@ -4,7 +4,7 @@ export const CONTRACTS = {
   PACKAGE_ID: "0xbe8689e72a8634bef82a833d327938e04c47816a818b0c1ec1a6e46a81c6e13b",
   
   // Global Pool Registry ID (create once with create_registry function)
-  REGISTRY_ID: "0xc402659c50b4c88e33a936660150f0eebf37824ff1d8eadf9437199e24bb1aaf", // Paste your GlobalPoolRegistry object ID here after calling create_registry
+  REGISTRY_ID: "0x5bab3dea150fc5f4f8e3552b672437a57ca8f111a098dd3cef3dcaf1e5c76fff", // Paste your GlobalPoolRegistry object ID here after calling create_registry
   
   // KANARI Token
   KANARI: {
@@ -23,8 +23,6 @@ export const CONTRACTS = {
   FEE_MED: 50,    // 0.5%
   FEE_HIGH: 100,  // 1.0%
   BASIS_POINTS: 10000,
-  // Optional UI page password (leave empty to disable)
-  POOL_INFO_PASSWORD: "123456",
 };
 
 // Module names
