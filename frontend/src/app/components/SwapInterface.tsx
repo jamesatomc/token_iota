@@ -5,8 +5,9 @@ import { useSignAndExecuteTransaction, useCurrentAccount, useIotaClient } from "
 import { Transaction } from "@iota/iota-sdk/transactions";
 import { CONTRACTS, MODULES, DEX_FUNCTIONS, parseAmount, DEFAULT_TOKENS, computeActiveLpSupply, formatAmount } from "../lib/contracts";
 import { usePools } from "../hooks/usePools";
-import TokenSelector from "./TokenSelector";
+import TokenSelector from "./UI/TokenSelector";
 import Card from "./UI/Card";
+import TokenAvatar from "./UI/TokenAvatar";
 import PoolSelect from "./UI/PoolSelect";
 import TokenAmount from "./UI/TokenAmount";
 import SlippageSelector from "./UI/SlippageSelector";
@@ -54,6 +55,16 @@ export default function SwapInterface() {
     }, [] as { type: string; symbol: string }[]);
   }, [pools]);
 
+  // Build token items for TokenSelector: enrich candidates with any data from DEFAULT_TOKENS
+  const tokenItemsForSelector = useMemo(() => {
+    return tokenCandidates.map((t) => {
+      const found = DEFAULT_TOKENS.find((d) => d.type === t.type);
+      if (found) return found;
+      // fallback shape expected by TokenSelector (TokenItem)
+      return { type: t.type, symbol: t.symbol, name: undefined, decimals: 9 };
+    });
+  }, [tokenCandidates]);
+
   // memoize selected pool object for quick access
   const selectedPoolObj = useMemo(() => pools.find((p) => p.poolId === poolId) ?? null, [pools, poolId]);
 
@@ -89,11 +100,11 @@ export default function SwapInterface() {
           setPoolUi(null);
           return;
         }
-  const fields = poolObj.data.content.fields as Record<string, unknown> | undefined;
-  const lpSupplyStr = String((fields?.["lp_supply"] as string) ?? "0");
+        const fields = poolObj.data.content.fields as Record<string, unknown> | undefined;
+        const lpSupplyStr = String((fields?.["lp_supply"] as string) ?? "0");
 
-  const rawBurn = fields?.["burn_reserve"];
-  const burnAddr = extractOptionAddress(rawBurn);
+        const rawBurn = fields?.["burn_reserve"];
+        const burnAddr = extractOptionAddress(rawBurn);
 
         let burnedAmount = "0";
         if (burnAddr) {
@@ -488,18 +499,40 @@ export default function SwapInterface() {
 
   return (
 
-    <Card maxWidth="max-w-md" minHeight="min-h-[560px]" className="shadow-sm mx-auto w-full overflow-x-hidden">
-      <h2 className="text-2xl font-bold mb-6 text-gray-900">Swap Tokens</h2>
+    <Card maxWidth="max-w-full sm:max-w-md" minHeight="h-auto sm:min-h-[560px] min-h-[480px]" className="shadow-sm mx-auto w-full p-4 sm:p-6 overflow-x-hidden">
+      <h2 className="text-xl sm:text-2xl font-bold mb-6 text-gray-900">Swap Tokens</h2>
 
       {/* Pool Selection */}
       <PoolSelect poolId={poolId} setPoolId={handlePoolChange} pools={pools} loading={poolsLoading} />
+
+      {/* Show selected pair (avatars + symbols) similar to LiquidityInterface */}
+      {selectedPoolObj && (
+        (() => {
+          const fx = tokenItemsForSelector.find((t) => t.type === selectedPoolObj.tokenX);
+          const fy = tokenItemsForSelector.find((t) => t.type === selectedPoolObj.tokenY);
+          return (
+            <div className="mt-4 bg-white rounded-lg p-4 border border-gray-100">
+              <div className="flex items-center gap-3">
+                <div className="flex -space-x-2 items-center">
+                  <TokenAvatar symbol={selectedPoolObj.tokenXSymbol} tokenType={selectedPoolObj.tokenX} size={32} imgSrc={fx?.logo} verified={!!fx?.verified} />
+                  <TokenAvatar symbol={selectedPoolObj.tokenYSymbol} tokenType={selectedPoolObj.tokenY} size={32} imgSrc={fy?.logo} verified={!!fy?.verified} />
+                </div>
+                <div className="ml-3">
+                  <div className="font-semibold">{selectedPoolObj.tokenXSymbol}/{selectedPoolObj.tokenYSymbol}</div>
+                  <div className="text-xs text-gray-500">{selectedPoolObj.tokenXSymbol} paired with native {selectedPoolObj.tokenYSymbol} (Dev fee: {(parseInt(selectedPoolObj.feeBps || "0") / 100).toFixed(1)}%)</div>
+                </div>
+              </div>
+            </div>
+          );
+        })()
+      )}
 
       {/* Burn / reserved LP info for the selected pool */}
       {poolUi && (
         <div className="mb-4 bg-gray-50 rounded-lg p-3 text-sm">
           <div className="flex justify-between items-center">
             <div className="text-gray-700">Burn Reserve</div>
-            <div className="font-mono text-gray-800">{poolUi.burnAddr ? `${poolUi.burnAddr.slice(0,8)}...${poolUi.burnAddr.slice(-6)}` : "—"}</div>
+            <div className="font-mono text-gray-800">{poolUi.burnAddr ? `${poolUi.burnAddr.slice(0, 8)}...${poolUi.burnAddr.slice(-6)}` : "—"}</div>
           </div>
           <div className="flex justify-between items-center mt-1">
             <div className="text-gray-700">Burned LP</div>
@@ -553,7 +586,7 @@ export default function SwapInterface() {
         <TokenSelector
           isOpen={showSelectorFrom}
           onClose={() => setShowSelectorFrom(false)}
-          tokens={tokenCandidates.map((t) => ({ type: t.type, symbol: t.symbol }))}
+          tokens={tokenItemsForSelector}
           onSelect={(type, symbol) => {
             setTokenFromType(type);
             setTokenFromSymbol(symbol);
@@ -567,7 +600,7 @@ export default function SwapInterface() {
         <TokenSelector
           isOpen={showSelectorTo}
           onClose={() => setShowSelectorTo(false)}
-          tokens={tokenCandidates.map((t) => ({ type: t.type, symbol: t.symbol }))}
+          tokens={tokenItemsForSelector}
           onSelect={(type, symbol) => {
             setTokenToType(type);
             setTokenToSymbol(symbol);

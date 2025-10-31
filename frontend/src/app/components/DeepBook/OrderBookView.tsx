@@ -4,8 +4,10 @@ import { useState, useEffect, useCallback } from "react";
 import { useCurrentAccount, useIotaClient } from "@iota/dapp-kit";
 import { useSignAndExecuteTransaction } from "@iota/dapp-kit";
 import { Transaction } from "@iota/iota-sdk/transactions";
-import { CONTRACTS, MODULES, DEEPBOOK_FUNCTIONS, DEEPBOOK, formatAmount } from "../lib/contracts";
-import Card from "./UI/Card";
+import { CONTRACTS, MODULES, DEEPBOOK_FUNCTIONS, DEEPBOOK, formatAmount } from "../../lib/contracts";
+import Card from "../UI/Card";
+import TokenPair from "../UI/TokenPair";
+
 
 interface Order {
   id: string;
@@ -221,9 +223,14 @@ export default function OrderBookView({
       <div className="flex items-center justify-between mb-4">
         <div>
           <h3 className="text-xl font-bold text-gray-900">Order Book</h3>
-          <p className="text-sm text-gray-600">
-            {baseToken.split("::").pop()} / {quoteToken.split("::").pop()}
-          </p>
+          <div className="text-sm text-gray-600 mt-1">
+            <TokenPair
+              baseSymbol={String(baseToken.split("::").pop())}
+              quoteSymbol={String(quoteToken.split("::").pop())}
+              baseToken={baseToken}
+              quoteToken={quoteToken}
+            />
+          </div>
         </div>
         <div className="flex items-center gap-3">
           <button

@@ -2,8 +2,9 @@
 
 import { useEffect, useState, useRef } from "react";
 import { useIotaClient, useCurrentAccount } from "@iota/dapp-kit";
-import { CONTRACTS, TokenItem, DEFAULT_TOKENS, formatAmount } from "../lib/contracts";
+import { CONTRACTS, TokenItem, DEFAULT_TOKENS, formatAmount } from "../../lib/contracts";
 import TokenManager from "./TokenManager";
+import TokenAvatar from "./TokenAvatar";
 
 interface Coin {
   balance?: number | string;
@@ -166,10 +167,17 @@ export default function TokenSelector({ isOpen, onClose, tokens, onSelect }: Pro
               className="w-full text-left px-4 py-3 hover:bg-gray-50 flex items-center justify-between"
             >
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-full bg-blue-600 flex items-center justify-center text-white font-bold">{t.symbol?.[0] || "T"}</div>
+                <TokenAvatar symbol={t.symbol} tokenType={t.type} size={40} className="shrink-0" imgSrc={t.logo} verified={!!t.verified} />
                 <div className="min-w-0 flex items-center gap-2">
                   <div className="min-w-0">
-                    <div className="font-semibold text-gray-900 text-sm leading-tight">{t.symbol}</div>
+                    <div className="font-semibold text-gray-900 text-sm leading-tight flex items-center gap-2">
+                      <span>{t.symbol}</span>
+                      {t.verified && (
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4 text-green-600">
+                          <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.707a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                        </svg>
+                      )}
+                    </div>
                     <div className="text-xs text-gray-500 truncate max-w-[420px]" title={t.type}>{t.name || shortType(t.type)}</div>
                   </div>
 

@@ -143,7 +143,7 @@ export default function PoolInfo() {
         if (yLabel) setTokenYLabel(yLabel.toUpperCase());
 
         // persist last-viewed pool so sidebar can show pool-specific info
-        try { localStorage.setItem("lastViewedPoolId", poolId); } catch {}
+        try { localStorage.setItem("lastViewedPoolId", poolId); } catch { }
 
         // try to extract burn reserve address (option type may be represented differently by backends)
         const extractOptionAddress = (raw: unknown): string | null => {
@@ -162,7 +162,7 @@ export default function PoolInfo() {
 
         // attempt to read burn reserve and burned amount
         let burnedAmountStr = "0";
-  const rawBurn = (poolObject.data.content.fields as Record<string, unknown> | undefined)?.["burn_reserve"];
+        const rawBurn = (poolObject.data.content.fields as Record<string, unknown> | undefined)?.["burn_reserve"];
         const burnAddr = extractOptionAddress(rawBurn);
 
         if (burnAddr) {
@@ -172,9 +172,9 @@ export default function PoolInfo() {
               const bfields = burnObj.data.content.fields as Record<string, unknown> | undefined;
               if (bfields?.amount) burnedAmountStr = String(bfields.amount);
             }
-            } catch (err) {
-              console.warn("Failed to fetch burn reserve object:", err);
-            }
+          } catch (err) {
+            console.warn("Failed to fetch burn reserve object:", err);
+          }
         }
 
         setPoolData({

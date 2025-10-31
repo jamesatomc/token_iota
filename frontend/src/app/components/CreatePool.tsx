@@ -4,8 +4,8 @@ import { useState } from "react";
 import { useSignAndExecuteTransaction, useCurrentAccount } from "@iota/dapp-kit";
 import { Transaction } from "@iota/iota-sdk/transactions";
 import { CONTRACTS, MODULES, DEX_FUNCTIONS } from "../lib/contracts";
-import TokenSelector from "./TokenSelector";
-import TokenManager from "./TokenManager";
+import TokenSelector from "./UI/TokenSelector";
+import TokenPicker from "./UI/TokenPicker";
 import { DEFAULT_TOKENS } from "../lib/contracts";
 import Card from "./UI/Card";
 
@@ -16,12 +16,12 @@ export default function CreatePool() {
   const [loading, setLoading] = useState(false);
   const [showSelectorX, setShowSelectorX] = useState(false);
   const [showSelectorY, setShowSelectorY] = useState(false);
-  const [showManager, setShowManager] = useState(false);
-  const [copiedX, setCopiedX] = useState(false);
-  const [copiedY, setCopiedY] = useState(false);
+
 
   const { mutate: signAndExecute } = useSignAndExecuteTransaction();
   const currentAccount = useCurrentAccount();
+
+  // balances intentionally hidden in this UI
 
   const feeValues = {
     low: { bps: CONTRACTS.FEE_LOW, display: "0.1%" },
@@ -33,7 +33,7 @@ export default function CreatePool() {
 
   const getSymbolForType = (t: string) => {
     if (!t) return "?";
-  const found = DEFAULT_TOKENS.find((x) => x.type === t);
+    const found = DEFAULT_TOKENS.find((x) => x.type === t);
     if (found) return found.symbol;
     try {
       const raw = localStorage.getItem("dex:customTokens");
@@ -166,82 +166,26 @@ export default function CreatePool() {
 
       {/* Token X Selection (opens TokenSelector) */}
       <div className="mb-4">
-        <label className="block text-sm font-medium mb-2 text-gray-700">First Token</label>
-        <div>
-          <button
-            onClick={() => setShowSelectorX(true)}
-            className="w-full flex items-center justify-between px-4 py-3 rounded-lg border border-gray-200 bg-white"
-          >
-            <div className="flex items-center gap-3 min-w-0">
-              <div className="w-10 h-10 shrink-0 rounded-full bg-blue-600 flex items-center justify-center text-white font-bold">{(tokenXType.split("::").pop() || "T")[0]}</div>
-              <div className="text-left min-w-0 flex-1">
-                <div className="flex items-center justify-between gap-2">
-                  <div className="font-semibold text-gray-900 truncate">{getSymbolForType(tokenXType)}</div>
-                  <span
-                    role="button"
-                    tabIndex={0}
-                    onClick={(_e) => {
-                      _e.stopPropagation();
-                      try {
-                        void navigator.clipboard.writeText(tokenXType);
-                        setCopiedX(true);
-                        setTimeout(() => setCopiedX(false), 1400);
-                      } catch {
-                        // ignore
-                      }
-                    }}
-                    className="text-xs text-gray-500 hover:text-gray-700 ml-2 cursor-pointer"
-                    title="Copy full token type"
-                  >
-                    {copiedX ? "Copied" : "Copy"}
-                  </span>
-                </div>
-                <div className="text-xs text-gray-500 truncate" title={shortType(tokenXType)}>{shortType(tokenXType)}</div>
-              </div>
-            </div>
-            <div className="text-sm text-gray-500">Select</div>
-          </button>
-        </div>
+        <TokenPicker
+          label="First Token"
+          tokenType={tokenXType}
+          balance={null}
+          decimals={DEFAULT_TOKENS.find((d) => d.type === tokenXType)?.decimals ?? 9}
+          onOpen={() => setShowSelectorX(true)}
+          showBalance={false}
+        />
       </div>
 
       {/* Token Y Selection (opens TokenSelector) */}
       <div className="mb-6">
-        <label className="block text-sm font-medium mb-2 text-gray-700">Second Token</label>
-        <div>
-          <button
-            onClick={() => setShowSelectorY(true)}
-            className="w-full flex items-center justify-between px-4 py-3 rounded-lg border border-gray-200 bg-white"
-          >
-            <div className="flex items-center gap-3 min-w-0">
-              <div className="w-10 h-10 shrink-0 rounded-full bg-blue-600 flex items-center justify-center text-white font-bold">{(tokenYType.split("::").pop() || "T")[0]}</div>
-              <div className="text-left min-w-0 flex-1">
-                <div className="flex items-center justify-between gap-2">
-                  <div className="font-semibold text-gray-900 truncate">{getSymbolForType(tokenYType)}</div>
-                  <span
-                    role="button"
-                    tabIndex={0}
-                    onClick={(_e) => {
-                      _e.stopPropagation();
-                      try {
-                        void navigator.clipboard.writeText(tokenYType);
-                        setCopiedY(true);
-                        setTimeout(() => setCopiedY(false), 1400);
-                      } catch {
-                        // ignore
-                      }
-                    }}
-                    className="text-xs text-gray-500 hover:text-gray-700 ml-2 cursor-pointer"
-                    title="Copy full token type"
-                  >
-                    {copiedY ? "Copied" : "Copy"}
-                  </span>
-                </div>
-                <div className="text-xs text-gray-500 truncate" title={shortType(tokenYType)}>{shortType(tokenYType)}</div>
-              </div>
-            </div>
-            <div className="text-sm text-gray-500">Select</div>
-          </button>
-        </div>
+        <TokenPicker
+          label="Second Token"
+          tokenType={tokenYType}
+          balance={null}
+          decimals={DEFAULT_TOKENS.find((d) => d.type === tokenYType)?.decimals ?? 9}
+          onOpen={() => setShowSelectorY(true)}
+          showBalance={false}
+        />
       </div>
 
       <div className="mb-6">
@@ -314,19 +258,7 @@ export default function CreatePool() {
       >
         {loading ? "Creating Pool..." : !currentAccount ? "Connect Wallet" : !CONTRACTS.REGISTRY_ID ? "Set Registry ID in contracts.ts" : "Create Pool"}
       </button>
-      <div className="mt-3 text-center">
-        <button
-          onClick={() => setShowManager(true)}
-          className="text-sm text-blue-600 underline"
-        >
-          Manage custom tokens
-        </button>
-      </div>
-      <TokenManager
-        isOpen={showManager}
-        onClose={() => setShowManager(false)}
-        onChange={() => { /* no-op: TokenManager writes to localStorage; CreatePool reads symbol from localStorage via getSymbolForType */ }}
-      />
+
       {showSelectorX && (
         <TokenSelector
           isOpen={showSelectorX}

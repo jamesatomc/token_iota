@@ -43,12 +43,19 @@ export type TokenItem = {
   symbol: string;
   name?: string;
   decimals?: number;
+  // Optional path or URL to logo. Can be a path relative to public/ (e.g. '/logos/kanari.svg')
+  // or an absolute URL (e.g. 'https://example.com/logo.png').
+  logo?: string;
+  // Optional verified flag shown in UI
+  verified?: boolean;
 };
 
 // Default tokens shown in selectors (can be extended by TokenManager/custom tokens)
 export const DEFAULT_TOKENS: TokenItem[] = [
-  { type: CONTRACTS.KANARI.TYPE, symbol: "KANARI", name: "Kanari Token", decimals: 9 },
-  { type: CONTRACTS.IOTA.TYPE, symbol: "IOTA", name: "IOTA", decimals: 9 },
+  // Example: KANARI uses a path relative to `public/`
+  { type: CONTRACTS.KANARI.TYPE, symbol: "KANARI", name: "Kanari Token", decimals: 9, logo: "https://avatars.githubusercontent.com/u/127471673?s=400&u=28db99d5575a4824ce011a32a8dacf729b64ba57&v=4", verified: true },
+  // Example: IOTA uses an absolute URL to demonstrate external logo hosting
+  { type: CONTRACTS.IOTA.TYPE, symbol: "IOTA", name: "IOTA", decimals: 9, logo: "https://s2.coinmarketcap.com/static/img/coins/64x64/1720.png", verified: true },
 ];
 
 // Function names for DEX

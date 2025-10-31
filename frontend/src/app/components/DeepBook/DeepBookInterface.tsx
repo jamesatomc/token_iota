@@ -3,9 +3,10 @@
 import { useState, useCallback, useEffect } from "react";
 import { useSignAndExecuteTransaction, useCurrentAccount, useIotaClient } from "@iota/dapp-kit";
 import { Transaction } from "@iota/iota-sdk/transactions";
-import { CONTRACTS, MODULES, DEEPBOOK_FUNCTIONS, DEFAULT_TOKENS, DEEPBOOK, parseAmount, formatAmount, TokenItem } from "../lib/contracts";
-import Card from "./UI/Card";
-import TokenSelector from "./TokenSelector";
+import { CONTRACTS, MODULES, DEEPBOOK_FUNCTIONS, DEFAULT_TOKENS, DEEPBOOK, parseAmount, formatAmount, TokenItem } from "../../lib/contracts";
+import Card from "../UI/Card";
+import TokenSelector from "../UI/TokenSelector";
+import TokenPicker from "../UI/TokenPicker";
 import OrderBookView from "./OrderBookView";
 import QuickTrade from "./QuickTrade";
 import PriceChart from "./PriceChart";
@@ -779,49 +780,8 @@ export default function DeepBookInterface() {
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-          <div>
-            <label className="text-sm text-gray-600">Base Token</label>
-            <button type="button" onClick={() => setShowSelectorBase(true)} className="mt-2 w-full flex items-center justify-between px-4 py-3 rounded-xl border border-gray-200 bg-white">
-              <div className="min-w-0 text-left">
-                <div className="font-semibold text-gray-900">{baseToken.split("::").pop()}</div>
-                <div className="flex items-center gap-2">
-                  <div className="text-xs text-gray-500 truncate" title={baseToken}>{baseToken ? baseToken.split("::").slice(-2).join("::") : baseToken}</div>
-                  <button
-                    type="button"
-                    onClick={() => navigator.clipboard?.writeText(baseToken)}
-                    className="text-xs text-gray-400 hover:text-gray-700"
-                    title="Copy token type/address"
-                  >
-                    Copy
-                  </button>
-                </div>
-                <div className="text-xs text-gray-500 mt-1">Balance: <span className="font-mono">{baseBalance !== null ? formatAmount(baseBalance, getDecimals(baseToken)) : "-"}</span></div>
-              </div>
-              <div className="text-xs text-gray-500">Select</div>
-            </button>
-          </div>
-
-          <div>
-            <label className="text-sm text-gray-600">Quote Token</label>
-            <button type="button" onClick={() => setShowSelectorQuote(true)} className="mt-2 w-full flex items-center justify-between px-4 py-3 rounded-xl border border-gray-200 bg-white">
-              <div className="min-w-0 text-left">
-                <div className="font-semibold text-gray-900">{quoteToken.split("::").pop()}</div>
-                <div className="flex items-center gap-2">
-                  <div className="text-xs text-gray-500 truncate" title={quoteToken}>{quoteToken ? quoteToken.split("::").slice(-2).join("::") : quoteToken}</div>
-                  <button
-                    type="button"
-                    onClick={() => navigator.clipboard?.writeText(quoteToken)}
-                    className="text-xs text-gray-400 hover:text-gray-700"
-                    title="Copy token type/address"
-                  >
-                    Copy
-                  </button>
-                </div>
-                <div className="text-xs text-gray-500 mt-1">Balance: <span className="font-mono">{quoteBalance !== null ? formatAmount(quoteBalance, getDecimals(quoteToken)) : "-"}</span></div>
-              </div>
-              <div className="text-xs text-gray-500">Select</div>
-            </button>
-          </div>
+          <TokenPicker label="Base Token" tokenType={baseToken} balance={baseBalance} decimals={getDecimals(baseToken)} onOpen={() => setShowSelectorBase(true)} />
+          <TokenPicker label="Quote Token" tokenType={quoteToken} balance={quoteBalance} decimals={getDecimals(quoteToken)} onOpen={() => setShowSelectorQuote(true)} />
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">

@@ -6,7 +6,7 @@ import SwapInterface from "./components/SwapInterface";
 import LiquidityInterface from "./components/LiquidityInterface";
 import CreatePool from "./components/CreatePool";
 import PoolInfo from "./components/PoolInfo";
-import DeepBookInterface from "./components/DeepBookInterface";
+import DeepBookInterface from "./components/DeepBook/DeepBookInterface";
 // WalletBalance intentionally unused in layout; uncomment and use in sidebar when needed
 // import WalletBalance from "./components/WalletBalance";
 import MintKanari from "./components/MintKanari";

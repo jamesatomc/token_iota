@@ -1,6 +1,7 @@
 "use client";
 
-import React from "react";
+import TokenAvatar from "./TokenAvatar";
+import { DEFAULT_TOKENS } from "../../lib/contracts";
 
 interface Props {
   label: string;
@@ -26,7 +27,7 @@ export default function TokenAmount({
   onHalf,
 }: Props) {
   return (
-    <div className="bg-gray-50 rounded-xl p-4 mb-2 relative h-32">
+    <div className="bg-gray-50 rounded-xl p-4 mb-2 relative h-auto sm:h-32">
       <div className="flex justify-between mb-2">
         <span className="text-sm text-gray-600">{label}</span>
       </div>
@@ -36,14 +37,18 @@ export default function TokenAmount({
         className="absolute top-4 right-4 flex items-center gap-3 px-3 py-2 rounded-lg bg-white text-sm font-medium text-gray-900"
         type="button"
       >
-        <div className="w-8 h-8 rounded-full bg-blue-500 flex items-center justify-center text-white font-bold">
-          {(tokenSymbol && tokenSymbol[0]) || "T"}
-        </div>
+        {/* TokenAvatar will attempt to load provided imgSrc (from DEFAULT_TOKENS) or /logos/<symbol>.svg and fall back to initial */}
+        {(() => {
+          const found = tokenType ? DEFAULT_TOKENS.find((d) => d.type === tokenType) : undefined;
+          return (
+            <TokenAvatar symbol={tokenSymbol ?? undefined} tokenType={tokenType ?? undefined} size={32} imgSrc={found?.logo} verified={!!found?.verified} />
+          );
+        })()}
         <div className="text-left">
           <div className="font-semibold text-sm leading-tight">
             {tokenSymbol ?? label}
           </div>
-          <div className="text-xs text-gray-500 truncate max-w-60" title={tokenType ?? ""}>
+          <div className="text-xs text-gray-500 truncate max-w-[120px] sm:max-w-60" title={tokenType ?? ""}>
             {tokenType ? tokenType.split("::").slice(-2).join("::") : ""}
           </div>
         </div>

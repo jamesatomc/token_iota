@@ -4,8 +4,8 @@ import { useState, useCallback } from "react";
 import { useCurrentAccount, useIotaClient } from "@iota/dapp-kit";
 import { useSignAndExecuteTransaction } from "@iota/dapp-kit";
 import { Transaction } from "@iota/iota-sdk/transactions";
-import { CONTRACTS, MODULES, DEEPBOOK_FUNCTIONS, DEEPBOOK, parseAmount, formatAmount } from "../lib/contracts";
-import Card from "./UI/Card";
+import { CONTRACTS, MODULES, DEEPBOOK_FUNCTIONS, DEEPBOOK, parseAmount, formatAmount } from "../../lib/contracts";
+import Card from "../UI/Card";
 
 interface QuickTradeProps {
   bookId: string;

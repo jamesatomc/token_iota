@@ -166,8 +166,8 @@ export default function MintKanari() {
           <button
             onClick={() => setUseCurrentAddress(true)}
             className={`flex-1 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${useCurrentAddress
-                ? "bg-blue-600 text-white"
-                : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+              ? "bg-blue-600 text-white"
+              : "bg-gray-100 text-gray-700 hover:bg-gray-200"
               }`}
           >
             My Address
@@ -175,8 +175,8 @@ export default function MintKanari() {
           <button
             onClick={() => setUseCurrentAddress(false)}
             className={`flex-1 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${!useCurrentAddress
-                ? "bg-blue-600 text-white"
-                : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+              ? "bg-blue-600 text-white"
+              : "bg-gray-100 text-gray-700 hover:bg-gray-200"
               }`}
           >
             Other Address

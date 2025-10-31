@@ -1,7 +1,5 @@
 "use client";
 
-import React from "react";
-
 interface Pool {
   poolId: string;
   tokenXSymbol?: string;

@@ -6,6 +6,9 @@ import { Transaction } from "@iota/iota-sdk/transactions";
 import { CONTRACTS, MODULES, DEX_FUNCTIONS, parseAmount } from "../lib/contracts";
 import { usePools } from "../hooks/usePools";
 import Card from "./UI/Card";
+import SlippageSelector from "./UI/SlippageSelector";
+import TokenAvatar from "./UI/TokenAvatar";
+import { DEFAULT_TOKENS } from "../lib/contracts";
 
 interface LPTokenInfo {
   objectId: string;
@@ -463,7 +466,7 @@ export default function LiquidityInterface() {
   // (estimation debounce removed - state was unused)
 
   return (
-    <Card maxWidth="max-w-md" minHeight="min-h-[560px]" className="shadow-sm mx-auto w-full">
+    <Card maxWidth="max-w-full sm:max-w-md" minHeight="min-h-[560px]" className="shadow-sm mx-auto w-full p-4 sm:p-6">
       <div className="flex mb-6 bg-gray-100 rounded-lg p-1">
         <button
           onClick={() => setTab("add")}
@@ -517,9 +520,17 @@ export default function LiquidityInterface() {
                 return (
                   <div className="mt-4 bg-white rounded-lg p-4 border border-gray-100">
                     <div className="flex items-center gap-3">
-                      <div className="flex -space-x-2">
-                        <div className="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center text-white font-bold">{p.tokenXSymbol?.[0] ?? 'X'}</div>
-                        <div className="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center text-white font-bold">{p.tokenYSymbol?.[0] ?? 'Y'}</div>
+                      <div className="flex -space-x-2 items-center">
+                        {(() => {
+                          const fx = DEFAULT_TOKENS.find((d) => d.type === p.tokenX);
+                          const fy = DEFAULT_TOKENS.find((d) => d.type === p.tokenY);
+                          return (
+                            <>
+                              <TokenAvatar symbol={p.tokenXSymbol} tokenType={p.tokenX} size={32} imgSrc={fx?.logo} verified={!!fx?.verified} />
+                              <TokenAvatar symbol={p.tokenYSymbol} tokenType={p.tokenY} size={32} imgSrc={fy?.logo} verified={!!fy?.verified} />
+                            </>
+                          );
+                        })()}
                       </div>
                       <div className="ml-3">
                         <div className="font-semibold">{p.tokenXSymbol}/{p.tokenYSymbol}</div>
@@ -529,7 +540,7 @@ export default function LiquidityInterface() {
 
                     <div className="mt-4 bg-gray-50 rounded-md p-3">
                       <div className="font-medium mb-2">Pool Information</div>
-                      <div className="text-sm text-gray-600 grid grid-cols-2 gap-2">
+                      <div className="text-sm text-gray-600 grid grid-cols-1 sm:grid-cols-2 gap-2">
                         <div> {p.tokenXSymbol} Reserve</div>
                         <div className="text-right">{p.reserveX ? (Number(p.reserveX) / 1e9).toString() : '0'} {p.tokenXSymbol}</div>
                         <div>{p.tokenYSymbol} Reserve</div>
@@ -588,9 +599,10 @@ export default function LiquidityInterface() {
             {/* token row */}
             <div className="mt-3">
               <button onClick={() => { /* could open token selector for liquidity */ }} className="w-full flex items-center gap-3 px-4 py-3 rounded-lg bg-white text-left">
-                <div className="w-10 h-10 rounded-full bg-blue-600 flex items-center justify-center text-white font-bold">
-                  {selectedPoolObj?.tokenXSymbol?.[0] ?? 'T'}
-                </div>
+                {(() => {
+                  const f = selectedPoolObj ? DEFAULT_TOKENS.find((d) => d.type === selectedPoolObj.tokenX) : undefined;
+                  return <TokenAvatar symbol={selectedPoolObj?.tokenXSymbol} tokenType={selectedPoolObj?.tokenX} size={40} imgSrc={f?.logo} verified={!!f?.verified} />;
+                })()}
                 <div>
                   <div className="font-semibold">{selectedPoolObj?.tokenXSymbol ?? 'Token X'}</div>
                   <div className="text-xs text-gray-500">{selectedPoolObj?.tokenXSymbol}</div>
@@ -608,7 +620,7 @@ export default function LiquidityInterface() {
                 value={amountX}
                 onChange={(e) => handleAmountXChange(e.target.value)}
                 placeholder="0.0"
-                className="w-full text-3xl font-semibold text-right bg-transparent border-none outline-none text-zinc-900"
+                className="w-full text-2xl sm:text-3xl font-semibold text-right bg-transparent border-none outline-none text-zinc-900"
               />
             </div>
           </div>
@@ -647,9 +659,10 @@ export default function LiquidityInterface() {
             {/* token row */}
             <div className="mt-3">
               <button onClick={() => { /* token selector */ }} className="w-full flex items-center gap-3 px-4 py-3 rounded-lg bg-white text-left">
-                <div className="w-10 h-10 rounded-full bg-blue-600 flex items-center justify-center text-white font-bold">
-                  {selectedPoolObj?.tokenYSymbol?.[0] ?? 'T'}
-                </div>
+                {(() => {
+                  const f = selectedPoolObj ? DEFAULT_TOKENS.find((d) => d.type === selectedPoolObj.tokenY) : undefined;
+                  return <TokenAvatar symbol={selectedPoolObj?.tokenYSymbol} tokenType={selectedPoolObj?.tokenY} size={40} imgSrc={f?.logo} verified={!!f?.verified} />;
+                })()}
                 <div>
                   <div className="font-semibold">{selectedPoolObj?.tokenYSymbol ?? 'Token Y'}</div>
                   <div className="text-xs text-gray-500">{selectedPoolObj?.tokenYSymbol}</div>
@@ -667,38 +680,13 @@ export default function LiquidityInterface() {
                 value={amountY}
                 onChange={(e) => handleAmountYChange(e.target.value)}
                 placeholder="0.0"
-                className="w-full text-3xl font-semibold text-right bg-transparent border-none outline-none text-zinc-900"
+                className="w-full text-2xl sm:text-3xl font-semibold text-right bg-transparent border-none outline-none text-zinc-900"
               />
             </div>
           </div>
 
           {/* Slippage */}
-          <div className="mb-4">
-            <label className="block text-sm font-medium mb-2 text-gray-700">
-              Slippage Tolerance (%)
-            </label>
-            <div className="flex gap-2">
-              {["0.1", "0.5", "1.0"].map((value) => (
-                <button
-                  key={value}
-                  onClick={() => setSlippage(value)}
-                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${slippage === value
-                    ? "bg-blue-600 text-white"
-                    : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-                    }`}
-                >
-                  {value}%
-                </button>
-              ))}
-              <input
-                type="number"
-                value={slippage}
-                onChange={(e) => setSlippage(e.target.value)}
-                className="w-28 text-center px-3 py-2 rounded-lg border border-gray-300 bg-white text-gray-900 text-sm"
-                placeholder="Custom"
-              />
-            </div>
-          </div>
+          <SlippageSelector slippage={slippage} setSlippage={setSlippage} />
 
           <button
             onClick={handleAddLiquidity}
