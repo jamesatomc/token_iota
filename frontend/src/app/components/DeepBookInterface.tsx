@@ -439,7 +439,8 @@ export default function DeepBookInterface() {
         setQuoteToken(first.quoteToken);
       }
     }
-  }, [registeredPairs]);
+  }, [registeredPairs, bookSelect]);
+  // include bookSelect so the auto-select effect re-evaluates when the user's selection changes
 
   // update normalized price when humanPrice changes
   useEffect(() => {

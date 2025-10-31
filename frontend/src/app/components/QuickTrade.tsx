@@ -286,7 +286,7 @@ export default function QuickTrade({
                         }
                         setQuantity(formatAmount(qtyU64, baseDecimals).replace(/\.?0+$/, ''));
                       }
-                    } catch (err) {
+                    } catch {
                       // ignore
                     }
                   }}
@@ -318,7 +318,7 @@ export default function QuickTrade({
                         }
                         setQuantity(formatAmount(qtyU64, baseDecimals).replace(/\.?0+$/, ''));
                       }
-                    } catch (err) {
+                    } catch {
                       // ignore
                     }
                   }}
