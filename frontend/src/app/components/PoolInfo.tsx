@@ -146,22 +146,23 @@ export default function PoolInfo() {
         try { localStorage.setItem("lastViewedPoolId", poolId); } catch {}
 
         // try to extract burn reserve address (option type may be represented differently by backends)
-        const extractOptionAddress = (raw: any): string | null => {
+        const extractOptionAddress = (raw: unknown): string | null => {
           if (!raw) return null;
           if (typeof raw === "string") return raw;
-          if (typeof raw === "object") {
-            if (raw?.Some) return raw.Some;
-            if (raw?.some) return raw.some;
-            if (raw?.value) return raw.value;
-            const keys = Object.keys(raw);
-            if (keys.length === 1) return raw[keys[0]];
+          if (typeof raw === "object" && raw !== null) {
+            const rb = raw as Record<string, unknown>;
+            if (typeof rb["Some"] === "string") return rb["Some"] as string;
+            if (typeof rb["some"] === "string") return rb["some"] as string;
+            if (typeof rb["value"] === "string") return rb["value"] as string;
+            const keys = Object.keys(rb);
+            if (keys.length === 1 && typeof rb[keys[0]] === "string") return rb[keys[0]] as string;
           }
           return null;
         };
 
         // attempt to read burn reserve and burned amount
         let burnedAmountStr = "0";
-        const rawBurn = (poolObject.data.content.fields as any)?.burn_reserve;
+  const rawBurn = (poolObject.data.content.fields as Record<string, unknown> | undefined)?.["burn_reserve"];
         const burnAddr = extractOptionAddress(rawBurn);
 
         if (burnAddr) {
@@ -171,9 +172,9 @@ export default function PoolInfo() {
               const bfields = burnObj.data.content.fields as Record<string, unknown> | undefined;
               if (bfields?.amount) burnedAmountStr = String(bfields.amount);
             }
-          } catch (e) {
-            console.warn("Failed to fetch burn reserve object:", e);
-          }
+            } catch (err) {
+              console.warn("Failed to fetch burn reserve object:", err);
+            }
         }
 
         setPoolData({
@@ -190,7 +191,7 @@ export default function PoolInfo() {
           const reserved = BigInt(burnedAmountStr || "0");
           const active = computeActiveLpSupply(totalLp, reserved);
           setPoolUi({ burnAddr: burnAddr ?? undefined, burnedAmount: String(reserved.toString()), activeLp: String(active.toString()) });
-        } catch (e) {
+        } catch {
           // ignore conversion issues
           setPoolUi(null);
         }

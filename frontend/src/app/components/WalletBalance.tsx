@@ -34,10 +34,6 @@ export default function WalletBalance() {
     }
   );
 
-  if (!currentAccount) {
-    return null;
-  }
-
   // try to show burn/reserved LP info for the last-viewed pool (set by PoolInfo)
   useEffect(() => {
     const load = async () => {
@@ -47,20 +43,22 @@ export default function WalletBalance() {
         // fetch pool object
         const poolObj = await client.getObject({ id: pid, options: { showContent: true, showType: true } });
         if (poolObj.data?.content?.dataType !== "moveObject") return;
-        const fields = poolObj.data.content.fields as any;
-        const lpSupplyStr = String(fields?.lp_supply ?? "0");
+        const fields = poolObj.data.content.fields as Record<string, unknown> | undefined;
+        const lpSupplyStr = String((fields?.['lp_supply'] as string) ?? "0");
 
         // extract burn reserve address similarly to PoolInfo
-        const rawBurn = fields?.burn_reserve;
+        const rawBurn = fields?.['burn_reserve'];
         let burnAddr: string | null = null;
-        if (rawBurn) {
-          if (typeof rawBurn === "string") burnAddr = rawBurn;
-          else if (rawBurn?.Some) burnAddr = rawBurn.Some;
-          else if (rawBurn?.some) burnAddr = rawBurn.some;
-          else if (rawBurn?.value) burnAddr = rawBurn.value;
+        if (typeof rawBurn === 'string') {
+          burnAddr = rawBurn;
+        } else if (rawBurn && typeof rawBurn === 'object') {
+          const rb = rawBurn as Record<string, unknown>;
+          if (typeof rb['Some'] === 'string') burnAddr = rb['Some'] as string;
+          else if (typeof rb['some'] === 'string') burnAddr = rb['some'] as string;
+          else if (typeof rb['value'] === 'string') burnAddr = rb['value'] as string;
           else {
-            const keys = Object.keys(rawBurn || {});
-            if (keys.length === 1) burnAddr = rawBurn[keys[0]];
+            const keys = Object.keys(rb);
+            if (keys.length === 1 && typeof rb[keys[0]] === 'string') burnAddr = rb[keys[0]] as string;
           }
         }
 
@@ -69,11 +67,11 @@ export default function WalletBalance() {
           try {
             const b = await client.getObject({ id: burnAddr, options: { showContent: true } });
             if (b.data?.content?.dataType === "moveObject") {
-              const bf = b.data.content.fields as any;
-              if (bf?.amount) burnedAmount = String(bf.amount);
+              const bf = b.data.content.fields as Record<string, unknown> | undefined;
+              if (bf && bf['amount'] !== undefined) burnedAmount = String(bf['amount']);
             }
-          } catch (e) {
-            console.warn("Failed to load burn object in WalletBalance:", e);
+          } catch (err) {
+            console.warn("Failed to load burn object in WalletBalance:", err);
           }
         }
 
@@ -86,12 +84,16 @@ export default function WalletBalance() {
         } catch {
           setViewedPool({ poolId: pid, burnAddr: burnAddr ?? undefined, burnedAmount: burnedAmount, activeLp: undefined, lpSupply: lpSupplyStr });
         }
-      } catch (e) {
+      } catch {
         // ignore
       }
     };
-    load();
+    void load();
   }, [client]);
+
+  if (!currentAccount) {
+    return null;
+  }
 
   return (
     <div className="bg-white dark:bg-zinc-900 rounded-xl p-4 shadow-lg border border-zinc-200 dark:border-zinc-800">

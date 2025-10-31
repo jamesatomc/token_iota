@@ -61,15 +61,16 @@ export default function SwapInterface() {
   const [poolUi, setPoolUi] = useState<{ burnAddr?: string; burnedAmount?: string; activeLp?: string; lpSupply?: string } | null>(null);
 
   // helper to extract Option<address>-like shapes returned by some backends
-  const extractOptionAddress = (raw: any): string | null => {
+  const extractOptionAddress = (raw: unknown): string | null => {
     if (!raw) return null;
     if (typeof raw === "string") return raw;
-    if (typeof raw === "object") {
-      if (raw?.Some) return raw.Some;
-      if (raw?.some) return raw.some;
-      if (raw?.value) return raw.value;
-      const keys = Object.keys(raw);
-      if (keys.length === 1) return raw[keys[0]];
+    if (typeof raw === "object" && raw !== null) {
+      const rb = raw as Record<string, unknown>;
+      if (typeof rb["Some"] === "string") return rb["Some"] as string;
+      if (typeof rb["some"] === "string") return rb["some"] as string;
+      if (typeof rb["value"] === "string") return rb["value"] as string;
+      const keys = Object.keys(rb);
+      if (keys.length === 1 && typeof rb[keys[0]] === "string") return rb[keys[0]] as string;
     }
     return null;
   };
@@ -88,19 +89,19 @@ export default function SwapInterface() {
           setPoolUi(null);
           return;
         }
-        const fields = poolObj.data.content.fields as any;
-        const lpSupplyStr = String(fields?.lp_supply ?? "0");
+  const fields = poolObj.data.content.fields as Record<string, unknown> | undefined;
+  const lpSupplyStr = String((fields?.["lp_supply"] as string) ?? "0");
 
-        const rawBurn = fields?.burn_reserve;
-        const burnAddr = extractOptionAddress(rawBurn);
+  const rawBurn = fields?.["burn_reserve"];
+  const burnAddr = extractOptionAddress(rawBurn);
 
         let burnedAmount = "0";
         if (burnAddr) {
           try {
             const b = await client.getObject({ id: burnAddr, options: { showContent: true } });
             if (b.data?.content?.dataType === "moveObject") {
-              const bf = b.data.content.fields as any;
-              if (bf?.amount) burnedAmount = String(bf.amount);
+              const bf = b.data.content.fields as Record<string, unknown> | undefined;
+              if (bf && bf['amount'] !== undefined) burnedAmount = String(bf['amount']);
             }
           } catch (e) {
             console.warn("Failed to fetch burn reserve object in SwapInterface:", e);
