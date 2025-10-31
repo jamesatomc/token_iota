@@ -11,9 +11,14 @@ export default function MintKanari() {
   const [recipient, setRecipient] = useState("");
   const [loading, setLoading] = useState(false);
   const [useCurrentAddress, setUseCurrentAddress] = useState(true);
+  const [token, setToken] = useState<"KANARI" | "USDC">("KANARI");
 
   const { mutate: signAndExecute } = useSignAndExecuteTransaction();
   const currentAccount = useCurrentAccount();
+
+  // Derived values for UI display based on selected token
+  const treasuryCapAddress = token === "USDC" ? CONTRACTS.USDC.TREASURY_CAP : CONTRACTS.KANARI.TREASURY_CAP;
+  const displayDecimals = token === "USDC" ? 6 : 9;
 
   const handleMint = async () => {
     if (!currentAccount || !amount) {
@@ -32,12 +37,18 @@ export default function MintKanari() {
     try {
       const tx = new Transaction();
 
-      const amountParsed = parseAmount(amount);
+      // Use token-specific decimals
+      const decimals = token === "USDC" ? 6 : 9;
+      const amountParsed = parseAmount(amount, decimals);
+
+      // Choose module and treasury cap based on token
+      const module = token === "USDC" ? MODULES.USDC : MODULES.KANARI;
+      const treasuryCap = token === "USDC" ? CONTRACTS.USDC.TREASURY_CAP : CONTRACTS.KANARI.TREASURY_CAP;
 
       tx.moveCall({
-        target: `${CONTRACTS.PACKAGE_ID}::${MODULES.KANARI}::mint`,
+        target: `${CONTRACTS.PACKAGE_ID}::${module}::mint`,
         arguments: [
-          tx.object(CONTRACTS.KANARI.TREASURY_CAP),
+          tx.object(treasuryCap),
           tx.pure.u64(amountParsed),
           tx.pure.address(targetAddress),
         ],
@@ -50,7 +61,7 @@ export default function MintKanari() {
         {
           onSuccess: (result) => {
             console.log("Mint successful:", result);
-            alert(`Successfully minted ${amount} KANARI!\nDigest: ${result.digest}`);
+            alert(`Successfully minted ${amount} ${token}!\nDigest: ${result.digest}`);
             setAmount("");
             if (!useCurrentAddress) setRecipient("");
           },
@@ -77,9 +88,31 @@ export default function MintKanari() {
           </svg>
         </div>
         <div>
-          <h2 className="text-2xl font-bold text-gray-900">Mint KANARI</h2>
-          <p className="text-sm text-gray-600">Create new KANARI tokens</p>
+          <h2 className="text-2xl font-bold text-gray-900">Mint {token}</h2>
+          <p className="text-sm text-gray-600">Create new {token} tokens</p>
         </div>
+      </div>
+
+      {/* Token Selector */}
+      <div className="mb-4 flex gap-2">
+        <button
+          onClick={() => setToken("KANARI")}
+          className={`flex-1 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${token === "KANARI"
+            ? "bg-blue-600 text-white"
+            : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+            }`}
+        >
+          KANARI
+        </button>
+        <button
+          onClick={() => setToken("USDC")}
+          className={`flex-1 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${token === "USDC"
+            ? "bg-blue-600 text-white"
+            : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+            }`}
+        >
+          USDC
+        </button>
       </div>
 
       {/* Info Banner */}
@@ -104,12 +137,12 @@ export default function MintKanari() {
           <div className="flex justify-between items-start gap-2">
             <span className="text-gray-600">Address:</span>
             <span className="font-mono text-gray-900 text-right break-all">
-              {CONTRACTS.KANARI.TREASURY_CAP.slice(0, 10)}...{CONTRACTS.KANARI.TREASURY_CAP.slice(-8)}
+              {treasuryCapAddress.slice(0, 10)}...{treasuryCapAddress.slice(-8)}
             </span>
           </div>
           <div className="flex justify-between">
             <span className="text-gray-600">Decimals:</span>
-            <span className="font-mono text-gray-900">9</span>
+            <span className="font-mono text-gray-900">{displayDecimals}</span>
           </div>
         </div>
       </div>
@@ -128,12 +161,12 @@ export default function MintKanari() {
             className="w-full px-4 py-3 pr-20 rounded-lg border border-gray-300 bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-600"
           />
           <div className="absolute right-3 top-1/2 -translate-y-1/2 text-sm font-medium text-zinc-600 dark:text-zinc-400">
-            KANARI
+            {token}
           </div>
         </div>
         {amount && (
           <p className="mt-2 text-xs text-gray-500">
-            Raw amount: {parseAmount(amount)} (with 9 decimals)
+            Raw amount: {parseAmount(amount, token === "USDC" ? 6 : 9)} (with {token === "USDC" ? 6 : 9} decimals)
           </p>
         )}
       </div>
@@ -217,7 +250,7 @@ export default function MintKanari() {
         ) : !currentAccount ? (
           "Connect Wallet"
         ) : (
-          "Mint KANARI"
+          `Mint ${token}`
         )}
       </button>
 
@@ -229,7 +262,7 @@ export default function MintKanari() {
             <svg className="w-4 h-4 text-yellow-500 mt-0.5 shrink-0" fill="currentColor" viewBox="0 0 20 20">
               <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
             </svg>
-            <span>Minting creates new KANARI tokens</span>
+            <span>Minting creates new {token} tokens</span>
           </li>
           <li className="flex items-start gap-2">
             <svg className="w-4 h-4 text-yellow-500 mt-0.5 shrink-0" fill="currentColor" viewBox="0 0 20 20">

@@ -15,6 +15,14 @@ export const CONTRACTS = {
     METADATA: "0x96443fd852318f87150e4d20d5d3c1f542ad58662d251a2c4e7f1f7878a75ca2",
     TYPE: "0x98ba38ead506c776cd365a70491152d6e4d3f2a5f23275562fc6b05f1e3d0737::KANARI::KANARI",
   },
+
+    // KANARI Token
+  USDC: {
+    TREASURY_CAP: "0x30fdc55e4aa7f6332241b898004db06ab991b4850be069a29350b50ce88355b4",
+    METADATA: "0x41ec6cd2ab00b9456bf42fae63094360a06c004fa79481823bd0c87fc77ff162",
+    TYPE: "0x98ba38ead506c776cd365a70491152d6e4d3f2a5f23275562fc6b05f1e3d0737::USDC::USDC",
+  },
+  
   
   // IOTA Token
   IOTA: {
@@ -32,6 +40,7 @@ export const CONTRACTS = {
 export const MODULES = {
   DEX: "DEX",
   DEX_FACTORY: "DEXFactory",
+  USDC: "USDC",
   KANARI: "KANARI",
   DEEPBOOK: "DeepBook",
   PRICE_ORACLE: "PriceOracle",
@@ -54,6 +63,9 @@ export type TokenItem = {
 export const DEFAULT_TOKENS: TokenItem[] = [
   // Example: KANARI uses a path relative to `public/`
   { type: CONTRACTS.KANARI.TYPE, symbol: "KANARI", name: "Kanari Token", decimals: 9, logo: "https://avatars.githubusercontent.com/u/127471673?s=400&u=28db99d5575a4824ce011a32a8dacf729b64ba57&v=4", verified: true },
+
+  // Example: USDC uses a path relative to `public/`
+  { type: CONTRACTS.USDC.TYPE, symbol: "USDC", name: "USD Coin", decimals: 6, logo: "https://s2.coinmarketcap.com/static/img/coins/64x64/3408.png", verified: true },
   // Example: IOTA uses an absolute URL to demonstrate external logo hosting
   { type: CONTRACTS.IOTA.TYPE, symbol: "IOTA", name: "IOTA", decimals: 9, logo: "https://s2.coinmarketcap.com/static/img/coins/64x64/1720.png", verified: true },
 ];
