@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { useSignAndExecuteTransaction, useCurrentAccount, useIotaClient } from "@iota/dapp-kit";
 import { Transaction } from "@iota/iota-sdk/transactions";
-import { CONTRACTS, MODULES, DEX_FUNCTIONS, parseAmount, DEFAULT_TOKENS } from "../lib/contracts";
+import { CONTRACTS, MODULES, DEX_FUNCTIONS, parseAmount, DEFAULT_TOKENS, computeActiveLpSupply, formatAmount } from "../lib/contracts";
 import { usePools } from "../hooks/usePools";
 import TokenSelector from "./TokenSelector";
 import Card from "./UI/Card";
@@ -56,6 +56,72 @@ export default function SwapInterface() {
 
   // memoize selected pool object for quick access
   const selectedPoolObj = useMemo(() => pools.find((p) => p.poolId === poolId) ?? null, [pools, poolId]);
+
+  // UI state for burn/reserved LP info for selected pool
+  const [poolUi, setPoolUi] = useState<{ burnAddr?: string; burnedAmount?: string; activeLp?: string; lpSupply?: string } | null>(null);
+
+  // helper to extract Option<address>-like shapes returned by some backends
+  const extractOptionAddress = (raw: any): string | null => {
+    if (!raw) return null;
+    if (typeof raw === "string") return raw;
+    if (typeof raw === "object") {
+      if (raw?.Some) return raw.Some;
+      if (raw?.some) return raw.some;
+      if (raw?.value) return raw.value;
+      const keys = Object.keys(raw);
+      if (keys.length === 1) return raw[keys[0]];
+    }
+    return null;
+  };
+
+  // Fetch burn reserve object and compute active LP when pool changes
+  useEffect(() => {
+    const load = async () => {
+      if (!poolId || !client) {
+        setPoolUi(null);
+        return;
+      }
+
+      try {
+        const poolObj = await client.getObject({ id: poolId, options: { showContent: true, showType: true } });
+        if (poolObj.data?.content?.dataType !== "moveObject") {
+          setPoolUi(null);
+          return;
+        }
+        const fields = poolObj.data.content.fields as any;
+        const lpSupplyStr = String(fields?.lp_supply ?? "0");
+
+        const rawBurn = fields?.burn_reserve;
+        const burnAddr = extractOptionAddress(rawBurn);
+
+        let burnedAmount = "0";
+        if (burnAddr) {
+          try {
+            const b = await client.getObject({ id: burnAddr, options: { showContent: true } });
+            if (b.data?.content?.dataType === "moveObject") {
+              const bf = b.data.content.fields as any;
+              if (bf?.amount) burnedAmount = String(bf.amount);
+            }
+          } catch (e) {
+            console.warn("Failed to fetch burn reserve object in SwapInterface:", e);
+          }
+        }
+
+        try {
+          const total = BigInt(lpSupplyStr || "0");
+          const reserved = BigInt(burnedAmount || "0");
+          const active = computeActiveLpSupply(total, reserved);
+          setPoolUi({ burnAddr: burnAddr ?? undefined, burnedAmount: burnedAmount, activeLp: String(active.toString()), lpSupply: lpSupplyStr });
+        } catch {
+          setPoolUi({ burnAddr: burnAddr ?? undefined, burnedAmount: burnedAmount, activeLp: undefined, lpSupply: lpSupplyStr });
+        }
+      } catch (e) {
+        console.warn("Error loading pool burn info:", e);
+        setPoolUi(null);
+      }
+    };
+    void load();
+  }, [poolId, client]);
 
   // Fetch balances for chosen tokens when pool or account changes
   const fetchBalances = useCallback(async () => {
@@ -426,6 +492,24 @@ export default function SwapInterface() {
 
       {/* Pool Selection */}
       <PoolSelect poolId={poolId} setPoolId={handlePoolChange} pools={pools} loading={poolsLoading} />
+
+      {/* Burn / reserved LP info for the selected pool */}
+      {poolUi && (
+        <div className="mb-4 bg-gray-50 rounded-lg p-3 text-sm">
+          <div className="flex justify-between items-center">
+            <div className="text-gray-700">Burn Reserve</div>
+            <div className="font-mono text-gray-800">{poolUi.burnAddr ? `${poolUi.burnAddr.slice(0,8)}...${poolUi.burnAddr.slice(-6)}` : "—"}</div>
+          </div>
+          <div className="flex justify-between items-center mt-1">
+            <div className="text-gray-700">Burned LP</div>
+            <div className="font-mono font-semibold text-gray-900">{poolUi.burnedAmount ? formatAmount(BigInt(poolUi.burnedAmount)) : "0"}</div>
+          </div>
+          <div className="flex justify-between items-center mt-1">
+            <div className="text-gray-700">Active LP</div>
+            <div className="font-mono font-semibold text-gray-900">{poolUi.activeLp ? formatAmount(BigInt(poolUi.activeLp)) : poolUi.lpSupply ? formatAmount(BigInt(poolUi.lpSupply)) : "0"}</div>
+          </div>
+        </div>
+      )}
 
       {/* From Token */}
       <TokenAmount
