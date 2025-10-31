@@ -1,17 +1,17 @@
 /// Module: token
-module kanari_network::KANARI;
+module kanari_network::USDC;
 
 use iota::coin::{Self, TreasuryCap, Coin};
 use iota::url;
 
-public struct KANARI has drop {}
+public struct USDC has drop {}
 
-fun init(witness: KANARI, ctx: &mut TxContext) {
+fun init(witness: USDC, ctx: &mut TxContext) {
     let (treasury, metadata) = coin::create_currency(
         witness,
-        9,
-        b"KANARI",
-        b"KANARI Token",
+        6,
+        b"USDC",
+        b"USDC Token",
         b"",
         option::some(
             url::new_unsafe_from_bytes(
@@ -25,7 +25,7 @@ fun init(witness: KANARI, ctx: &mut TxContext) {
 }
 
 public fun mint(
-    treasury_cap: &mut TreasuryCap<KANARI>,
+    treasury_cap: &mut TreasuryCap<USDC>,
     amount: u64,
     recipient: address,
     ctx: &mut TxContext,
@@ -34,13 +34,13 @@ public fun mint(
     transfer::public_transfer(coin, recipient);
 }
 
-// Function to burn KANARI tokens
-public entry fun burn(cap: &mut TreasuryCap<KANARI>, coin: Coin<KANARI>) {
+// Function to burn USDC tokens
+public entry fun burn(cap: &mut TreasuryCap<USDC>, coin: Coin<USDC>) {
     coin::burn(cap, coin);
 }
 
 public entry fun transfer(
-    token: &mut Coin<KANARI>,
+    token: &mut Coin<USDC>,
     amount: u64,
     recipient: address,
     ctx: &mut TxContext,
@@ -49,7 +49,7 @@ public entry fun transfer(
     transfer::public_transfer(coin_to_transfer, recipient);
 }
 
-public entry fun balance(coin: &coin::Coin<KANARI>): u64 {
+public entry fun balance(coin: &coin::Coin<USDC>): u64 {
     let balance = coin::balance(coin);
     balance.value()
 }

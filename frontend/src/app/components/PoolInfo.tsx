@@ -3,7 +3,7 @@
 import { useState, useMemo } from "react";
 import { usePools } from "../hooks/usePools";
 import { useCurrentAccount, useIotaClient, useSignAndExecuteTransaction } from "@iota/dapp-kit";
-import { formatAmount as rawFormatAmount, CONTRACTS, MODULES, DEX_FUNCTIONS } from "../lib/contracts";
+import { formatAmount as rawFormatAmount, CONTRACTS, MODULES, DEX_FUNCTIONS, computeActiveLpSupply } from "../lib/contracts";
 import Card from "./UI/Card";
 
 interface PoolData {
@@ -64,6 +64,8 @@ export default function PoolInfo() {
   const [oracleId, setOracleId] = useState("");
   const [oracleMaxObservations, setOracleMaxObservations] = useState<number>(100);
   const [oracleInfo, setOracleInfo] = useState<{ observations?: number } | null>(null);
+  // UI helper state for burn/reserved info
+  const [poolUi, setPoolUi] = useState<{ burnAddr?: string; burnedAmount?: string; activeLp?: string } | null>(null);
 
   const client = useIotaClient();
   const currentAccount = useCurrentAccount();
@@ -140,12 +142,58 @@ export default function PoolInfo() {
         if (xLabel) setTokenXLabel(xLabel.toUpperCase());
         if (yLabel) setTokenYLabel(yLabel.toUpperCase());
 
+        // persist last-viewed pool so sidebar can show pool-specific info
+        try { localStorage.setItem("lastViewedPoolId", poolId); } catch {}
+
+        // try to extract burn reserve address (option type may be represented differently by backends)
+        const extractOptionAddress = (raw: any): string | null => {
+          if (!raw) return null;
+          if (typeof raw === "string") return raw;
+          if (typeof raw === "object") {
+            if (raw?.Some) return raw.Some;
+            if (raw?.some) return raw.some;
+            if (raw?.value) return raw.value;
+            const keys = Object.keys(raw);
+            if (keys.length === 1) return raw[keys[0]];
+          }
+          return null;
+        };
+
+        // attempt to read burn reserve and burned amount
+        let burnedAmountStr = "0";
+        const rawBurn = (poolObject.data.content.fields as any)?.burn_reserve;
+        const burnAddr = extractOptionAddress(rawBurn);
+
+        if (burnAddr) {
+          try {
+            const burnObj = await client.getObject({ id: burnAddr, options: { showContent: true } });
+            if (burnObj.data?.content?.dataType === "moveObject") {
+              const bfields = burnObj.data.content.fields as Record<string, unknown> | undefined;
+              if (bfields?.amount) burnedAmountStr = String(bfields.amount);
+            }
+          } catch (e) {
+            console.warn("Failed to fetch burn reserve object:", e);
+          }
+        }
+
         setPoolData({
           balance_x: String(fields?.balance_x ?? "0"),
           balance_y: String(fields?.balance_y ?? "0"),
           fee_bps: String(fields?.fee_bps ?? "0"),
           lp_supply: String(fields?.lp_supply ?? "0"),
+          // attach optional local-only helper fields for UI (we keep PoolData shape small; these are set via refs below)
         });
+
+        // compute active LP and expose via a small UI state (keeps memo simple)
+        try {
+          const totalLp = BigInt(String(fields?.lp_supply ?? "0"));
+          const reserved = BigInt(burnedAmountStr || "0");
+          const active = computeActiveLpSupply(totalLp, reserved);
+          setPoolUi({ burnAddr: burnAddr ?? undefined, burnedAmount: String(reserved.toString()), activeLp: String(active.toString()) });
+        } catch (e) {
+          // ignore conversion issues
+          setPoolUi(null);
+        }
       } else {
         alert("Invalid pool object");
       }
@@ -449,6 +497,28 @@ export default function PoolInfo() {
                   {memoValues.lpSupplyFormatted}
                 </span>
               </div>
+              {poolUi && (
+                <>
+                  <div className="flex justify-between items-center">
+                    <span className="text-gray-600 text-sm sm:text-base">Burn Reserve</span>
+                    <span className="font-mono text-xs text-gray-700 truncate max-w-[140px] text-right">
+                      {poolUi.burnAddr ? `${poolUi.burnAddr.slice(0, 8)}...${poolUi.burnAddr.slice(-6)}` : "—"}
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-gray-600 text-sm sm:text-base">Burned LP</span>
+                    <span className="font-mono font-semibold text-gray-900 text-sm sm:text-base">
+                      {poolUi.burnedAmount ? formatAmount(BigInt(poolUi.burnedAmount)) : "0"}
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-gray-600 text-sm sm:text-base">Active LP</span>
+                    <span className="font-mono font-semibold text-gray-900 text-sm sm:text-base">
+                      {poolUi.activeLp ? formatAmount(BigInt(poolUi.activeLp)) : memoValues.lpSupplyFormatted}
+                    </span>
+                  </div>
+                </>
+              )}
               <div className="flex justify-between items-center">
                 <span className="text-gray-600 text-sm sm:text-base">Fee</span>
                 <span className="font-mono font-semibold text-gray-900 text-sm sm:text-base">

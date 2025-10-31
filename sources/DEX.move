@@ -43,6 +43,11 @@ public struct LiquidityPool<phantom X, phantom Y> has key {
     balance_y: Balance<Y>,
     fee_bps: u64,
     lp_supply: u64,
+    /// Address of the burn reserve object that holds the reserved LP amount.
+    /// This is `option::none()` for uninitialized pools and `option::some(addr)`
+    /// after initial liquidity is added. The burn object is a shared object so
+    /// it can be inspected by frontends and auditors.
+    burn_reserve: option::Option<address>,
 }
 
 /// Global pool registry to prevent duplicate pools
@@ -58,6 +63,13 @@ public struct PoolCreated has copy, drop {
     fee_bps: u64,
     type_x: vector<u8>,
     type_y: vector<u8>,
+}
+
+/// Burn reserve object created on initial liquidity to hold MINIMUM_LIQUIDITY
+/// as an on-chain, inspectable object.
+public struct BurnReserve has key, store {
+    id: UID,
+    amount: u64,
 }
 
 public struct RegistryCreated has copy, drop {
@@ -133,6 +145,7 @@ public fun create_pool<X, Y>(
         balance_y: balance::zero(),
         fee_bps,
         lp_supply: 0,
+        burn_reserve: option::none(),
     };
 
     let pool_id = object::uid_to_address(&pool.id);
@@ -239,6 +252,17 @@ public fun add_liquidity<X, Y>(
 
         // Update total supply to include minimum liquidity
         pool.lp_supply = initial_lp;
+        // Mint a BurnReserve object to hold the reserved MINIMUM_LIQUIDITY.
+        // This creates an on-chain shared object that serves as an auditable
+        // record of the burned LP.
+        let burn = BurnReserve {
+            id: object::new(ctx),
+            amount: MINIMUM_LIQUIDITY,
+        };
+        let burn_addr = object::uid_to_address(&burn.id);
+        // Share the burn object so it is queryable on-chain
+        transfer::share_object(burn);
+        pool.burn_reserve = option::some(burn_addr);
 
         // Return only the user's share (excluding burned portion)
         initial_lp - MINIMUM_LIQUIDITY
@@ -370,7 +394,7 @@ public fun remove_liquidity<X, Y>(
 }
 
 // Helper function for swap calculations with u128 to prevent overflow
-fun calculate_swap_output(amount_in: u64, balance_in: u64, balance_out: u64, fee_bps: u64): u64 {
+public fun calculate_swap_output(amount_in: u64, balance_in: u64, balance_out: u64, fee_bps: u64): u64 {
     // Apply fee to input amount
     let amount_in_with_fee = (amount_in as u128) * ((BASIS_POINTS - fee_bps) as u128);
 
@@ -464,7 +488,7 @@ public fun swap_y_to_x<X, Y>(
 
 // Helper function to compare two vectors lexicographically
 // Returns true if v1 <= v2
-fun compare_vectors(v1: &vector<u8>, v2: &vector<u8>): bool {
+public fun compare_vectors(v1: &vector<u8>, v2: &vector<u8>): bool {
     let len1 = std::vector::length(v1);
     let len2 = std::vector::length(v2);
     let min_len = if (len1 < len2) { len1 } else { len2 };
@@ -534,6 +558,12 @@ public fun get_reserves<X, Y>(pool: &LiquidityPool<X, Y>): (u64, u64) {
     (balance::value(&pool.balance_x), balance::value(&pool.balance_y))
 }
 
+/// Get pool reserves as u128 for oracle calculations (avoids casting in oracle module)
+/// Returns (reserve_x_u128, reserve_y_u128)
+public fun get_reserves_u128<X, Y>(pool: &LiquidityPool<X, Y>): (u128, u128) {
+    ((balance::value(&pool.balance_x) as u128), (balance::value(&pool.balance_y) as u128))
+}
+
 /// Get LP supply
 public fun get_lp_supply<X, Y>(pool: &LiquidityPool<X, Y>): u64 {
     pool.lp_supply
@@ -544,9 +574,37 @@ public fun get_fee<X, Y>(pool: &LiquidityPool<X, Y>): u64 {
     pool.fee_bps
 }
 
+/// Returns the module-wide minimum liquidity constant that is reserved (burned)
+/// during the initial LP mint. This helps frontends and users show the locked
+/// amount that was intentionally excluded from initial LP receipts.
+public fun get_minimum_liquidity(): u64 {
+    MINIMUM_LIQUIDITY
+}
+
+/// Returns the effective amount of LP that was reserved/burned for the given
+/// pool. For pools that have been initialized with liquidity, this will return
+/// `MINIMUM_LIQUIDITY`. If the pool hasn't been initialized (lp_supply == 0),
+/// it returns 0.
+public fun get_burned_minimum_liquidity<X, Y>(pool: &LiquidityPool<X, Y>): u64 {
+    // If we have a burn reserve object recorded, return MINIMUM_LIQUIDITY.
+    // Otherwise return 0.
+    if (option::is_some(&pool.burn_reserve)) {
+        MINIMUM_LIQUIDITY
+    } else {
+        0
+    }
+}
+
 /// Get LP token amount from LP token object
 public fun get_lp_token_amount<X, Y>(lp_token: &LPToken<X, Y>): u64 {
     lp_token.amount
+}
+
+/// Get the address of the burn reserve object for the pool, if any.
+/// This object holds the reserved MINIMUM_LIQUIDITY and is shareable for
+/// frontends and auditors to inspect.
+public fun get_burn_reserve_address<X, Y>(pool: &LiquidityPool<X, Y>): Option<address> {
+    pool.burn_reserve
 }
 
 /// Get pool ID (address)

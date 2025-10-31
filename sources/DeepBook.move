@@ -139,7 +139,7 @@ public fun create_global_registry(ctx: &mut tx_context::TxContext) {
 }
 
 /// Helper function to compare two vectors lexicographically (returns true if v1 <= v2)
-fun compare_vectors(v1: &vector<u8>, v2: &vector<u8>): bool {
+public fun compare_vectors(v1: &vector<u8>, v2: &vector<u8>): bool {
     let len1 = std::vector::length(v1);
     let len2 = std::vector::length(v2);
     let min_len = if (len1 < len2) { len1 } else { len2 };

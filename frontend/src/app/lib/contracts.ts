@@ -1,19 +1,19 @@
 // Contract addresses and configuration
 export const CONTRACTS = {
   // Replace with your deployed package ID
-  PACKAGE_ID: "0x365d048bce7d1984f5877632fe63695d44cf5eb56cf3e4085d9c6b20c9270b97",
+  PACKAGE_ID: "0x98ba38ead506c776cd365a70491152d6e4d3f2a5f23275562fc6b05f1e3d0737",
   
   // Global Pool Registry ID (create once with create_registry function in DEX)
-  REGISTRY_ID: "0x1f5d768ea83a87167057720503758676e48d5208596aab69af0fbb2113b6ef24", // Paste your GlobalPoolRegistry object ID here after calling create_registry
+  REGISTRY_ID: "0x6cc8edadf3d2156f8560d89b09ecf31d1d13f98daf7179e5ed58efa1f4e68b7a", // Paste your GlobalPoolRegistry object ID here after calling create_registry
 
   // Global OrderBook Registry ID (create once with create_global_registry function in DeepBook)
-  REGISTRY_BOOK_ID: "0x0daedd92736893213e895d660dc1300ec85ab35557f09e4a6764430f80c51fe0", // Paste your GlobalOrderBookRegistry object ID here after calling create_global_registry
+  REGISTRY_BOOK_ID: "0xff0483c83be0371db3f0ed3e5634262262e51ee5ee81410a2eb819cf660b4af4", // Paste your GlobalOrderBookRegistry object ID here after calling create_global_registry
 
   // KANARI Token
   KANARI: {
-    TREASURY_CAP: "0xb5ab540ee10d7fb67a41b242effc6090d8b5d5d6349f8241a216acfd686d070b",
-    METADATA: "0x724695595eafbb4a8afb81af6c99b677179288d64298ed417b9acdbd51ec942e",
-    TYPE: "0x365d048bce7d1984f5877632fe63695d44cf5eb56cf3e4085d9c6b20c9270b97::kanari::KANARI",
+    TREASURY_CAP: "0xd990397ac5d9119a6bd96e2793f4864efb6050042ef9e25f4ba1c42c5a2a26e1",
+    METADATA: "0x96443fd852318f87150e4d20d5d3c1f542ad58662d251a2c4e7f1f7878a75ca2",
+    TYPE: "0x98ba38ead506c776cd365a70491152d6e4d3f2a5f23275562fc6b05f1e3d0737::KANARI::KANARI",
   },
   
   // IOTA Token
@@ -63,6 +63,10 @@ export const DEX_FUNCTIONS = {
   GET_LP_SUPPLY: "get_lp_supply",
   GET_FEE: "get_fee",
   GET_AMOUNT_OUT: "get_amount_out",
+  GET_MINIMUM_LIQUIDITY: "get_minimum_liquidity",
+  GET_BURNED_MINIMUM_LIQUIDITY: "get_burned_minimum_liquidity",
+  GET_BURN_RESERVE_ADDRESS: "get_burn_reserve_address",
+  GET_RESERVES_U128: "get_reserves_u128",
   POOL_EXISTS: "pool_exists",
   GET_POOL_ADDRESS: "get_pool_address",
   // Oracle-related (PriceOracle module exposes these via DEXFactory entry wrappers)
@@ -132,4 +136,23 @@ export const formatAmount = (amount: bigint | number, decimals: number = 9): str
 // Helper to parse amounts
 export const parseAmount = (amount: string, decimals: number = 9): string => {
   return (parseFloat(amount) * Math.pow(10, decimals)).toFixed(0);
+};
+
+// Frontend utility: compute active LP supply (total supply minus reserved MINIMUM_LIQUIDITY)
+export const computeActiveLpSupply = (totalLp: bigint | number, reserved: bigint | number): bigint => {
+  const total = typeof totalLp === 'bigint' ? totalLp : BigInt(Math.floor(Number(totalLp)));
+  const res = typeof reserved === 'bigint' ? reserved : BigInt(Math.floor(Number(reserved)));
+  if (total <= res) return BigInt(0);
+  return total - res;
+};
+
+// Compute user share of active supply as a floating percentage (0-100)
+export const computeUserSharePercent = (userLp: bigint | number, totalLp: bigint | number, reserved: bigint | number): number => {
+  const active = computeActiveLpSupply(totalLp, reserved);
+  const user = typeof userLp === 'bigint' ? userLp : BigInt(Math.floor(Number(userLp)));
+  if (active === BigInt(0)) return 0;
+  // convert to number safely for percentage; this may lose precision for extremely large values
+  const userNum = Number(user);
+  const activeNum = Number(active);
+  return (userNum / activeNum) * 100;
 };

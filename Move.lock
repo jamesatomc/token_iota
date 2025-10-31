@@ -30,6 +30,6 @@ flavor = "iota"
 
 [env.testnet]
 chain-id = "2304aa97"
-original-published-id = "0x365d048bce7d1984f5877632fe63695d44cf5eb56cf3e4085d9c6b20c9270b97"
-latest-published-id = "0x365d048bce7d1984f5877632fe63695d44cf5eb56cf3e4085d9c6b20c9270b97"
+original-published-id = "0x98ba38ead506c776cd365a70491152d6e4d3f2a5f23275562fc6b05f1e3d0737"
+latest-published-id = "0x98ba38ead506c776cd365a70491152d6e4d3f2a5f23275562fc6b05f1e3d0737"
 published-version = "1"

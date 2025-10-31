@@ -2,10 +2,10 @@
 /// This demonstrates how to use price oracle for safe collateral valuation
 module kanari_network::LendingExample;
 
-use iota::coin::{Self, Coin};
 use iota::clock::Clock;
-use kanari_network::PriceOracle;
+use iota::coin::{Self, Coin};
 use kanari_network::DEX::LiquidityPool;
+use kanari_network::PriceOracle;
 
 // Error codes
 const E_INSUFFICIENT_COLLATERAL: u64 = 1;
@@ -27,31 +27,31 @@ public struct LendingPosition<phantom Collateral, phantom Debt> has key {
 /// Deposit collateral and borrow against it using TWAP oracle
 public fun borrow_with_collateral<Collateral, Debt>(
     oracle: &PriceOracle::PriceOracle<Collateral, Debt>,
-    pool: &LiquidityPool<Collateral, Debt>,
+    _pool: &LiquidityPool<Collateral, Debt>,
     collateral: Coin<Collateral>,
     borrow_amount: u64,
     clock: &Clock,
     ctx: &mut TxContext,
 ): (LendingPosition<Collateral, Debt>, Coin<Debt>) {
     let collateral_amount = coin::value(&collateral);
-    
+
     // Get TWAP prices with multiple time windows for safety
-    let twap_5m = PriceOracle::get_twap_price(oracle, 300, clock);   // 5 minutes
-    let twap_15m = PriceOracle::get_twap_price(oracle, 900, clock);  // 15 minutes
-    
+    let twap_5m = PriceOracle::get_twap_price(oracle, 300, clock); // 5 minutes
+    let twap_15m = PriceOracle::get_twap_price(oracle, 900, clock); // 15 minutes
+
     // Validate price consistency (prevent manipulation)
     validate_price_deviation(twap_5m, twap_15m);
-    
+
     // Use the more conservative (lower) price for collateral valuation
     let conservative_price = if (twap_5m < twap_15m) { twap_5m } else { twap_15m };
-    
+
     // Calculate collateral value in Debt token terms
     let collateral_value = calculate_value(collateral_amount, conservative_price);
-    
+
     // Check collateralization ratio (must be > 150%)
     let max_borrow = collateral_value * 100 / (COLLATERAL_RATIO as u128);
     assert!((borrow_amount as u128) <= max_borrow, E_INSUFFICIENT_COLLATERAL);
-    
+
     // Create position (in real protocol, you'd mint debt tokens from treasury)
     let position = LendingPosition<Collateral, Debt> {
         id: object::new(ctx),
@@ -59,13 +59,13 @@ public fun borrow_with_collateral<Collateral, Debt>(
         debt_amount: borrow_amount,
         owner: ctx.sender(),
     };
-    
+
     // Destroy collateral coin (in real protocol, store in vault)
     transfer::public_transfer(collateral, @0x0); // Simplified - don't do this in production!
-    
+
     // Return borrowed tokens (in real protocol, mint from treasury)
     let borrowed = coin::zero<Debt>(ctx); // Simplified placeholder
-    
+
     (position, borrowed)
 }
 
@@ -77,10 +77,10 @@ public fun is_position_healthy<Collateral, Debt>(
 ): bool {
     // Use 15-minute TWAP for liquidation checks
     let twap = PriceOracle::get_twap_price(oracle, 900, clock);
-    
+
     let collateral_value = calculate_value(position.collateral_amount, twap);
     let required_collateral = (position.debt_amount as u128) * (COLLATERAL_RATIO as u128) / 100;
-    
+
     collateral_value >= required_collateral
 }
 
@@ -96,10 +96,10 @@ fun validate_price_deviation(price1: u128, price2: u128) {
     } else {
         (price2, price1)
     };
-    
+
     // Calculate percentage deviation
     let deviation = ((higher - lower) * 100) / lower;
-    
+
     // Ensure deviation is within acceptable range
     assert!(deviation <= (MAX_PRICE_DEVIATION as u128), E_PRICE_DEVIATION_TOO_HIGH);
 }
@@ -112,11 +112,11 @@ public fun get_collateral_ratio<Collateral, Debt>(
 ): u64 {
     let twap = PriceOracle::get_twap_price(oracle, 900, clock);
     let collateral_value = calculate_value(position.collateral_amount, twap);
-    
+
     if (position.debt_amount == 0) {
         return 0
     };
-    
+
     let ratio = collateral_value * 100 / (position.debt_amount as u128);
     (ratio as u64)
 }

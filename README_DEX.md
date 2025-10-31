@@ -413,6 +413,22 @@ let fee = DEX::get_fee(&pool);
 let expected_out = DEX::get_amount_out(&pool, 1000, true);
 ```
 
+**Note about MINIMUM_LIQUIDITY (frontend display):**
+
+The DEX reserves a small `MINIMUM_LIQUIDITY` when a pool is first initialized. This reserved amount is part of the `lp_supply` but is not minted to users. Frontends should subtract the reserved amount when computing active supply or user ownership percentages.
+
+Example (pseudo):
+
+```
+total_lp = DEX::get_lp_supply(&pool)
+reserved = DEX::get_minimum_liquidity()
+user_lp = DEX::get_lp_token_amount(&user_lp_token)
+active_supply = total_lp - reserved
+user_share = user_lp * 1_000_000_000 / active_supply  # scaled percentage
+```
+
+You can also call `DEX::get_burned_minimum_liquidity(&pool)` which returns the recorded reserved amount for that pool.
+
 ---
 
 ## 🧪 Test Scenarios

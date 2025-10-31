@@ -14,6 +14,9 @@ const E_INSUFFICIENT_LIQUIDITY: u64 = 3;
 // Price precision (9 decimals for accurate calculations)
 const PRICE_PRECISION: u128 = 1_000_000_000;
 
+// Max value for u128 (used to guard multiplications)
+const U128_MAX: u128 = 340282366920938463463374607431768211455u128;
+
 // Minimum time interval between observations (prevents spam)
 const MIN_OBSERVATION_INTERVAL: u64 = 10; // 10 seconds
 
@@ -112,8 +115,8 @@ public fun update_oracle<X, Y>(
     let current_time = iota::clock::timestamp_ms(clock) / 1000;
     let (reserve_x, reserve_y) = get_pool_reserves(pool);
 
-    // Skip if no liquidity
-    assert!(reserve_x > 0 && reserve_y > 0, E_INSUFFICIENT_LIQUIDITY);
+    // Skip if no liquidity (reserves are u128)
+    assert!(reserve_x > 0u128 && reserve_y > 0u128, E_INSUFFICIENT_LIQUIDITY);
 
     // Get last observation
     let last_obs = vector::borrow(&oracle.observations, vector::length(&oracle.observations) - 1);
@@ -129,12 +132,20 @@ public fun update_oracle<X, Y>(
     };
 
     // Calculate current price: price = reserve_y / reserve_x (Y per unit of X)
-    // Multiply by PRICE_PRECISION for accuracy
-    let current_price = (reserve_y as u128) * PRICE_PRECISION / (reserve_x as u128);
+    // Multiply by PRICE_PRECISION for accuracy. Reserves are already u128.
+    // Guard multiplication to prevent overflow: ensure reserve_y * PRICE_PRECISION
+    // fits into u128 before performing the multiply.
+    assert!(reserve_y <= U128_MAX / PRICE_PRECISION, E_INVALID_OBSERVATION);
+    let current_price = reserve_y * PRICE_PRECISION / reserve_x;
 
     // Calculate time-weighted price accumulation
     let time_delta = current_time - last_obs.timestamp;
-    let price_delta = current_price * (time_delta as u128);
+    // Guard multiplication current_price * time_delta to avoid u128 overflow
+    let time_delta_128 = (time_delta as u128);
+    assert!(current_price <= U128_MAX / time_delta_128, E_INVALID_OBSERVATION);
+    let price_delta = current_price * time_delta_128;
+    // Guard addition oracle.last_price_cumulative + price_delta
+    assert!(oracle.last_price_cumulative <= U128_MAX - price_delta, E_INVALID_OBSERVATION);
     let new_cumulative = oracle.last_price_cumulative + price_delta;
 
     // Create new observation
@@ -210,9 +221,13 @@ public fun get_spot_price<X, Y>(
     pool: &LiquidityPool<X, Y>,
 ): u128 {
     let (reserve_x, reserve_y) = get_pool_reserves(pool);
-    assert!(reserve_x > 0 && reserve_y > 0, E_INSUFFICIENT_LIQUIDITY);
-    
-    (reserve_y as u128) * PRICE_PRECISION / (reserve_x as u128)
+    // reserves are u128
+    assert!(reserve_x > 0u128 && reserve_y > 0u128, E_INSUFFICIENT_LIQUIDITY);
+
+    // Guard multiplication to prevent overflow in reserve_y * PRICE_PRECISION
+    assert!(reserve_y <= U128_MAX / PRICE_PRECISION, E_INVALID_OBSERVATION);
+
+    reserve_y * PRICE_PRECISION / reserve_x
 }
 
 // ========== Helper Functions ==========
@@ -243,8 +258,10 @@ fun find_observation_index(obs_list: &vector<Observation>, target_time: u64): u6
 }
 
 /// Get pool reserves (wrapper for DEX module)
-fun get_pool_reserves<X, Y>(pool: &LiquidityPool<X, Y>): (u64, u64) {
-    kanari_network::DEX::get_reserves(pool)
+fun get_pool_reserves<X, Y>(pool: &LiquidityPool<X, Y>): (u128, u128) {
+    // Use the DEX-provided helper that returns reserves as u128 to avoid
+    // repeated casting and keep arithmetic in 128-bit space.
+    kanari_network::DEX::get_reserves_u128(pool)
 }
 
 // ========== View Functions ==========
