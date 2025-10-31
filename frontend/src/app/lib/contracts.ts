@@ -32,7 +32,7 @@ export const CONTRACTS = {
 export const MODULES = {
   DEX: "DEX",
   DEX_FACTORY: "DEXFactory",
-  KANARI: "kanari",
+  KANARI: "KANARI",
   DEEPBOOK: "DeepBook",
   PRICE_ORACLE: "PriceOracle",
 };
