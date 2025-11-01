@@ -38,6 +38,13 @@ export default function QuickTrade({
   const client = useIotaClient();
   const { mutate: signAndExecute } = useSignAndExecuteTransaction();
 
+  // helper: safe BigInt power of 10 for decimal adjustments
+  const pow10Big = (exp: number) => {
+    if (!Number.isInteger(exp) || exp <= 0) return BigInt(1);
+    const safeExp = Math.min(Math.max(exp, 0), 36);
+    return BigInt(10) ** BigInt(safeExp);
+  };
+
   // Format price from normalized to human
   const formatPrice = (priceStr: string | undefined) => {
     if (!priceStr) return "N/A";
@@ -93,17 +100,20 @@ export default function QuickTrade({
       if (side === "buy") {
         // Place bid at best ask price (will match immediately)
         let coinIn;
+        const priceScale = BigInt(DEEPBOOK.PRICE_SCALE as number);
+        const diff = quoteDecimals - baseDecimals;
+
+        // compute requiredQuote with numerator/denominator and ceil
+        let numerator = quantityU64 * priceU64;
+        let denominator = priceScale;
+        if (diff > 0) numerator = numerator * pow10Big(diff);
+        else if (diff < 0) denominator = denominator * pow10Big(-diff);
+        let requiredQuote = (numerator + denominator - BigInt(1)) / denominator;
+
+        // Add 1% buffer for slippage
+        requiredQuote = (requiredQuote * BigInt(101) + BigInt(99)) / BigInt(100);
+
         if (quoteToken === CONTRACTS.IOTA.TYPE) {
-          const priceScale = BigInt(DEEPBOOK.PRICE_SCALE as number);
-          let requiredQuote = (quantityU64 * priceU64) / priceScale;
-          const diff = quoteDecimals - baseDecimals;
-          if (diff > 0) {
-            requiredQuote = requiredQuote * (BigInt(10) ** BigInt(diff));
-          } else if (diff < 0) {
-            requiredQuote = requiredQuote / (BigInt(10) ** BigInt(-diff));
-          }
-          // Add 1% buffer for slippage
-          requiredQuote = (requiredQuote * BigInt(101)) / BigInt(100);
           [coinIn] = tx.splitCoins(tx.gas, [requiredQuote.toString()]);
         } else {
           const coins = await client.getCoins({ owner: currentAccount.address, coinType: quoteToken });
@@ -116,16 +126,6 @@ export default function QuickTrade({
           if (rest.length > 0) {
             tx.mergeCoins(tx.object(primary.coinObjectId), rest.map((c) => tx.object(c.coinObjectId)));
           }
-          const priceScale = BigInt(DEEPBOOK.PRICE_SCALE as number);
-          let requiredQuote = (quantityU64 * priceU64) / priceScale;
-          const diff = quoteDecimals - baseDecimals;
-          if (diff > 0) {
-            requiredQuote = requiredQuote * (BigInt(10) ** BigInt(diff));
-          } else if (diff < 0) {
-            requiredQuote = requiredQuote / (BigInt(10) ** BigInt(-diff));
-          }
-          // Add 1% buffer
-          requiredQuote = (requiredQuote * BigInt(101)) / BigInt(100);
           [coinIn] = tx.splitCoins(tx.object(primary.coinObjectId), [requiredQuote.toString()]);
         }
 
@@ -277,7 +277,7 @@ export default function QuickTrade({
                         const priceScale = BigInt(DEEPBOOK.PRICE_SCALE as number);
                         const availableQuote = quoteBalance / BigInt(2);
                         const diff = (quoteDecimals || 9) - (baseDecimals || 9);
-                        const pow = BigInt(10) ** BigInt(Math.abs(diff));
+                        const pow = pow10Big(Math.abs(diff));
                         let qtyU64: bigint;
                         if (diff >= 0) {
                           qtyU64 = (availableQuote * priceScale) / priceU64 / pow;
@@ -309,7 +309,7 @@ export default function QuickTrade({
                         const priceScale = BigInt(DEEPBOOK.PRICE_SCALE as number);
                         const availableQuote = quoteBalance;
                         const diff = (quoteDecimals || 9) - (baseDecimals || 9);
-                        const pow = BigInt(10) ** BigInt(Math.abs(diff));
+                        const pow = pow10Big(Math.abs(diff));
                         let qtyU64: bigint;
                         if (diff >= 0) {
                           qtyU64 = (availableQuote * priceScale) / priceU64 / pow;
@@ -343,7 +343,16 @@ export default function QuickTrade({
                 if (!priceToUse) return "N/A";
                 const p = BigInt(priceToUse);
                 const q = BigInt(parseAmount(quantity, baseDecimals));
-                const total = (q * p) / BigInt(DEEPBOOK.PRICE_SCALE as number);
+                
+                // Match Move formula: (q * p * 10^{quote_decimals}) / (PRICE_SCALE * 10^{base_decimals})
+                const priceScale = BigInt(DEEPBOOK.PRICE_SCALE as number);
+                const diff = quoteDecimals - baseDecimals;
+                let numerator = q * p;
+                let denominator = priceScale;
+                if (diff > 0) numerator = numerator * (BigInt(10) ** BigInt(diff));
+                else if (diff < 0) denominator = denominator * (BigInt(10) ** BigInt(-diff));
+                const total = numerator / denominator;
+                
                 return formatAmount(total, quoteDecimals);
               } catch {
                 return "N/A";

@@ -67,9 +67,9 @@ export default function CreatePool() {
       return;
     }
 
-    // Check if REGISTRY_ID is configured
-    if (!CONTRACTS.REGISTRY_ID || !CONTRACTS.REGISTRY_ID.trim()) {
-      alert("Registry ID not configured. Please set CONTRACTS.REGISTRY_ID in contracts.ts");
+    // Check if REGISTRY_DEX_ID is configured
+    if (!CONTRACTS.REGISTRY_DEX_ID || !CONTRACTS.REGISTRY_DEX_ID.trim()) {
+      alert("Registry ID not configured. Please set CONTRACTS.REGISTRY_DEX_ID in contracts.ts");
       return;
     }
 
@@ -103,7 +103,7 @@ export default function CreatePool() {
       tx.moveCall({
         target: `${CONTRACTS.PACKAGE_ID}::${MODULES.DEX_FACTORY}::${DEX_FUNCTIONS.CREATE_POOL}`,
         arguments: [
-          tx.object(CONTRACTS.REGISTRY_ID),
+          tx.object(CONTRACTS.REGISTRY_DEX_ID),
           tx.pure.u64(feeBps),
         ],
         typeArguments: [finalTokenX, finalTokenY],
@@ -147,7 +147,7 @@ export default function CreatePool() {
           Create a new liquidity pool for any token pair
         </p>
 
-        {!CONTRACTS.REGISTRY_ID && (
+        {!CONTRACTS.REGISTRY_DEX_ID && (
           <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-4">
             <div className="flex items-start gap-2">
               <svg className="w-5 h-5 text-yellow-600 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
@@ -156,7 +156,7 @@ export default function CreatePool() {
               <div>
                 <p className="text-sm font-medium text-yellow-900">Registry ID Not Set</p>
                 <p className="text-sm text-yellow-800 mt-1">
-                  Please set <code className="bg-yellow-100 px-1 rounded font-mono text-xs">CONTRACTS.REGISTRY_ID</code> in <code className="bg-yellow-100 px-1 rounded">contracts.ts</code> before creating pools.
+                  Please set <code className="bg-yellow-100 px-1 rounded font-mono text-xs">CONTRACTS.REGISTRY_DEX_ID</code> in <code className="bg-yellow-100 px-1 rounded">contracts.ts</code> before creating pools.
                 </p>
               </div>
             </div>
@@ -253,10 +253,10 @@ export default function CreatePool() {
 
       <button
         onClick={handleCreatePool}
-        disabled={loading || !currentAccount || !CONTRACTS.REGISTRY_ID}
+        disabled={loading || !currentAccount || !CONTRACTS.REGISTRY_DEX_ID}
         className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-gray-200 text-white font-semibold py-4 rounded-xl transition-colors disabled:cursor-not-allowed"
       >
-        {loading ? "Creating Pool..." : !currentAccount ? "Connect Wallet" : !CONTRACTS.REGISTRY_ID ? "Set Registry ID in contracts.ts" : "Create Pool"}
+        {loading ? "Creating Pool..." : !currentAccount ? "Connect Wallet" : !CONTRACTS.REGISTRY_DEX_ID ? "Set Registry ID in contracts.ts" : "Create Pool"}
       </button>
 
       {showSelectorX && (

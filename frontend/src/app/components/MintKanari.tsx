@@ -42,11 +42,11 @@ export default function MintKanari() {
       const amountParsed = parseAmount(amount, decimals);
 
       // Choose module and treasury cap based on token
-      const module = token === "USDC" ? MODULES.USDC : MODULES.KANARI;
+      const moduleName = token === "USDC" ? MODULES.USDC : MODULES.KANARI;
       const treasuryCap = token === "USDC" ? CONTRACTS.USDC.TREASURY_CAP : CONTRACTS.KANARI.TREASURY_CAP;
 
       tx.moveCall({
-        target: `${CONTRACTS.PACKAGE_ID}::${module}::mint`,
+        target: `${CONTRACTS.PACKAGE_ID}::${moduleName}::mint`,
         arguments: [
           tx.object(treasuryCap),
           tx.pure.u64(amountParsed),

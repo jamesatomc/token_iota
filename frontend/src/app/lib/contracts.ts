@@ -1,26 +1,26 @@
 // Contract addresses and configuration
 export const CONTRACTS = {
   // Replace with your deployed package ID
-  PACKAGE_ID: "0x98ba38ead506c776cd365a70491152d6e4d3f2a5f23275562fc6b05f1e3d0737",
+  PACKAGE_ID: "0xc9ed1ab4cae1be9e2757be80ee515cd3d885fd2c1410e3e80dc9bf0d9bcc8c21",
   
   // Global Pool Registry ID (create once with create_registry function in DEX)
-  REGISTRY_ID: "0x6cc8edadf3d2156f8560d89b09ecf31d1d13f98daf7179e5ed58efa1f4e68b7a", // Paste your GlobalPoolRegistry object ID here after calling create_registry
+  REGISTRY_DEX_ID: "0xa9cda4d05adcf0ce8a4b133d358d1dfca515e05f0fe3db9f540e9b48aa798ca7", // Paste your GlobalPoolRegistry object ID here after calling create_registry
 
   // Global OrderBook Registry ID (create once with create_global_registry function in DeepBook)
-  REGISTRY_BOOK_ID: "0xff0483c83be0371db3f0ed3e5634262262e51ee5ee81410a2eb819cf660b4af4", // Paste your GlobalOrderBookRegistry object ID here after calling create_global_registry
+  REGISTRY_BOOK_ID: "0x9ad85e1f9194bced48b562e1b3fd975a2d6fbdc293780a707aae7b902988196d", // Paste your GlobalOrderBookRegistry object ID here after calling create_global_registry
 
   // KANARI Token
   KANARI: {
-    TREASURY_CAP: "0xd990397ac5d9119a6bd96e2793f4864efb6050042ef9e25f4ba1c42c5a2a26e1",
-    METADATA: "0x96443fd852318f87150e4d20d5d3c1f542ad58662d251a2c4e7f1f7878a75ca2",
-    TYPE: "0x98ba38ead506c776cd365a70491152d6e4d3f2a5f23275562fc6b05f1e3d0737::KANARI::KANARI",
+    TREASURY_CAP: "0xfc9ad054815c1a1390535308ce5fcbc8300cd9588f3b8d1863732110e8c3f5d0",
+    METADATA: "0x77e68e023ba7faa7bc49a8e494bb549b004fd1b9f8677966b2ebf71b4ee77558",
+    TYPE: "0xc9ed1ab4cae1be9e2757be80ee515cd3d885fd2c1410e3e80dc9bf0d9bcc8c21::KANARI::KANARI",
   },
 
     // KANARI Token
   USDC: {
-    TREASURY_CAP: "0x30fdc55e4aa7f6332241b898004db06ab991b4850be069a29350b50ce88355b4",
-    METADATA: "0x41ec6cd2ab00b9456bf42fae63094360a06c004fa79481823bd0c87fc77ff162",
-    TYPE: "0x98ba38ead506c776cd365a70491152d6e4d3f2a5f23275562fc6b05f1e3d0737::USDC::USDC",
+    TREASURY_CAP: "0x3a3fcde956f957c3f8eb4faf6ed78db2718e4794e04bff3346cbef5d0534c7f3",
+    METADATA: "0x510bb006b8244d25d0404b24dd09c9a76dae97117712a77b74ea95950ac158ef",
+    TYPE: "0xc9ed1ab4cae1be9e2757be80ee515cd3d885fd2c1410e3e80dc9bf0d9bcc8c21::USDC::USDC",
   },
   
   
@@ -108,10 +108,10 @@ export const DEEPBOOK_FUNCTIONS = {
   // Registry management
   CREATE_GLOBAL_REGISTRY: "create_global_registry",
   
-  // Order book creation
-  CREATE_ORDER_BOOK: "create_order_book",
-  CREATE_ORDER_BOOK_WITH_REGISTRY: "create_order_book_with_registry",
-  GET_OR_CREATE: "get_or_create_order_book",
+  // Order book creation (with explicit decimals - REQUIRED)
+  CREATE_ORDER_BOOK_WITH_DECIMALS: "create_order_book_with_decimals",
+  CREATE_ORDER_BOOK_WITH_REGISTRY_WITH_DECIMALS: "create_order_book_with_registry_with_decimals",
+  GET_OR_CREATE_WITH_DECIMALS: "get_or_create_order_book_with_decimals",
   
   // Order book queries
   BOOK_EXISTS: "book_exists",
@@ -144,6 +144,10 @@ export const DEEPBOOK_FUNCTIONS = {
 export const DEEPBOOK = {
   PRICE_SCALE: 1_000_000_000, // 9 decimals for price normalization
   DEFAULT_FEE_BPS: 30, // 0.3% default fee
+  
+  // IMPORTANT: All order book creation functions now REQUIRE explicit decimals!
+  // Use token-specific decimals (e.g., KANARI=9, USDC=6, IOTA=9)
+  // NO default decimals - prevents mismatched decimal bugs
 };
 
 // Helper to format amounts

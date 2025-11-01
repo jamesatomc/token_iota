@@ -220,7 +220,7 @@ export default function OrderBookView({
 
   return (
     <Card maxWidth="max-w-6xl">
-      <div className="flex items-center justify-between mb-4">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-4 gap-2">
         <div>
           <h3 className="text-xl font-bold text-gray-900">Order Book</h3>
           <div className="text-sm text-gray-600 mt-1">
@@ -232,21 +232,20 @@ export default function OrderBookView({
             />
           </div>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-2 sm:gap-3">
           <button
             onClick={() => setShowMyOrders(!showMyOrders)}
-            className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-              showMyOrders
+            className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${showMyOrders
                 ? "bg-blue-600 text-white"
                 : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-            }`}
+              }`}
           >
             {showMyOrders ? "📋 My Orders" : "📊 All Orders"}
           </button>
           <button
             onClick={fetchOrderBook}
             disabled={loading}
-            className="px-4 py-2 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm font-medium transition-colors disabled:opacity-50"
+            className="px-3 py-1.5 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm font-medium transition-colors disabled:opacity-50"
           >
             {loading ? "🔄 Loading..." : "🔄 Refresh"}
           </button>
@@ -274,13 +273,12 @@ export default function OrderBookView({
                 return (
                   <div
                     key={bid.id}
-                    className={`p-3 rounded-lg border ${
-                      isMyOrder
+                    className={`p-3 rounded-lg border ${isMyOrder
                         ? "border-blue-300 bg-blue-50"
                         : "border-gray-200 bg-white"
-                    }`}
+                      }`}
                   >
-                    <div className="flex items-start justify-between">
+                    <div className="flex flex-col sm:flex-row items-start justify-between">
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 mb-1">
                           <span className="text-xs font-mono text-gray-500">
@@ -317,7 +315,7 @@ export default function OrderBookView({
                         <button
                           onClick={() => handleCancelOrder(bid.id)}
                           disabled={cancelling === bid.id}
-                          className="ml-3 px-3 py-1.5 rounded-lg bg-red-100 hover:bg-red-200 text-red-700 text-xs font-medium transition-colors disabled:opacity-50"
+                          className="sm:ml-3 ml-0 mt-2 sm:mt-0 px-3 py-1.5 rounded-lg bg-red-100 hover:bg-red-200 text-red-700 text-xs font-medium transition-colors disabled:opacity-50"
                         >
                           {cancelling === bid.id ? "⏳" : "❌ Cancel"}
                         </button>
@@ -350,13 +348,12 @@ export default function OrderBookView({
                 return (
                   <div
                     key={ask.id}
-                    className={`p-3 rounded-lg border ${
-                      isMyOrder
+                    className={`p-3 rounded-lg border ${isMyOrder
                         ? "border-blue-300 bg-blue-50"
                         : "border-gray-200 bg-white"
-                    }`}
+                      }`}
                   >
-                    <div className="flex items-start justify-between">
+                    <div className="flex flex-col sm:flex-row items-start justify-between">
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 mb-1">
                           <span className="text-xs font-mono text-gray-500">
@@ -393,7 +390,7 @@ export default function OrderBookView({
                         <button
                           onClick={() => handleCancelOrder(ask.id)}
                           disabled={cancelling === ask.id}
-                          className="ml-3 px-3 py-1.5 rounded-lg bg-red-100 hover:bg-red-200 text-red-700 text-xs font-medium transition-colors disabled:opacity-50"
+                          className="sm:ml-3 ml-0 mt-2 sm:mt-0 px-3 py-1.5 rounded-lg bg-red-100 hover:bg-red-200 text-red-700 text-xs font-medium transition-colors disabled:opacity-50"
                         >
                           {cancelling === ask.id ? "⏳" : "❌ Cancel"}
                         </button>

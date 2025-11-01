@@ -49,6 +49,8 @@ public struct OrderBook<phantom Base, phantom Quote> has key {
     fee_balance_quote: Balance<Quote>, // collected fees in quote
     fee_bps: u64, // fee in basis points (e.g., 30 = 0.3%)
     max_depth: u64,
+    base_decimals: u8,
+    quote_decimals: u8,
 }
 
 // Events
@@ -90,10 +92,12 @@ public struct OrderBookRegistryCreated has copy, drop {
     registry_id: address,
 }
 
-/// Create a new order book
-public entry fun create_order_book<Base, Quote>(
+/// Internal: create a new order book with explicit decimals
+public fun create_order_book_with_decimals<Base, Quote>(
     fee_bps: u64,
     max_depth: u64,
+    base_decimals: u8,
+    quote_decimals: u8,
     ctx: &mut tx_context::TxContext,
 ) {
     // Prevent creating order book with same base and quote token
@@ -117,6 +121,8 @@ public entry fun create_order_book<Base, Quote>(
         fee_balance_quote: balance::zero(),
         fee_bps,
         max_depth: max_depth,
+        base_decimals,
+        quote_decimals,
     };
 
     // Emit an event with the created book id so UIs can discover the object address
@@ -160,11 +166,24 @@ public fun compare_vectors(v1: &vector<u8>, v2: &vector<u8>): bool {
     len1 <= len2
 }
 
+/// Compute 10^n as u128
+public fun pow10_u128(n: u8): u128 {
+    let mut res = 1u128;
+    let mut i = 0u8;
+    while (i < n) {
+        res = res * 10u128;
+        i = i + 1;
+    };
+    res
+}
+
 /// Create an order book and register it in the provided registry to prevent duplicates
-public fun create_order_book_with_registry<Base, Quote>(
+public fun create_order_book_with_registry_with_decimals<Base, Quote>(
     registry: &mut GlobalOrderBookRegistry,
     fee_bps: u64,
     max_depth: u64,
+    base_decimals: u8,
+    quote_decimals: u8,
     ctx: &mut tx_context::TxContext,
 ) {
     assert!(fee_bps <= 1000, E_INVALID_FEE); // max 10%
@@ -203,6 +222,8 @@ public fun create_order_book_with_registry<Base, Quote>(
         fee_balance_quote: balance::zero(),
         fee_bps,
         max_depth: max_depth,
+        base_decimals,
+        quote_decimals,
     };
 
     let book_id = object::uid_to_address(&book.id);
@@ -258,10 +279,12 @@ public fun get_book_address<Base, Quote>(registry: &GlobalOrderBookRegistry): Op
 }
 
 /// Factory: return existing book address for pair or create+register a new one
-public entry fun get_or_create_order_book<Base, Quote>(
+public fun get_or_create_order_book_with_decimals<Base, Quote>(
     registry: &mut GlobalOrderBookRegistry,
     fee_bps: u64,
     max_depth: u64,
+    base_decimals: u8,
+    quote_decimals: u8,
     ctx: &mut tx_context::TxContext,
 ): address {
     // Compute deterministic hash for this type pair (sorted to prevent duplicates)
@@ -301,6 +324,8 @@ public entry fun get_or_create_order_book<Base, Quote>(
             fee_balance_quote: balance::zero(),
             fee_bps,
             max_depth: max_depth,
+            base_decimals,
+            quote_decimals,
         };
 
         let book_id = object::uid_to_address(&book.id);
@@ -327,8 +352,13 @@ public entry fun place_bid<Base, Quote>(
 
     let maker = tx_context::sender(ctx);
 
-    // Calculate required quote amount: (quantity * price) / PRICE_SCALE
-    let required_quote = ((quantity as u128) * (price as u128) / PRICE_SCALE) as u64;
+    // Calculate required quote amount with decimals taken into account:
+    // required_quote = (quantity * price * 10^{quote_decimals}) / (PRICE_SCALE * 10^{base_decimals})
+    let scale_num = pow10_u128(book.quote_decimals);
+    let scale_den = pow10_u128(book.base_decimals);
+    let required_quote_u128 = ((quantity as u128) * (price as u128) * scale_num) / (PRICE_SCALE * scale_den);
+    assert!(required_quote_u128 <= U64_MAX, E_INSUFFICIENT_LIQUIDITY);
+    let required_quote = required_quote_u128 as u64;
     let payment_value = coin::value(&payment);
     assert!(payment_value >= required_quote, E_INSUFFICIENT_LIQUIDITY);
 
@@ -364,7 +394,9 @@ public entry fun place_bid<Base, Quote>(
             let match_price = ask.price;
             let matched_u128 = (matched as u128);
             let price_u128 = (match_price as u128);
-            let trade_value_u128 = (matched_u128 * price_u128) / PRICE_SCALE;
+            // trade_value = matched * price / PRICE_SCALE adjusted for decimals
+            // = (matched * price * 10^{quote_decimals}) / (PRICE_SCALE * 10^{base_decimals})
+            let trade_value_u128 = (matched_u128 * price_u128 * pow10_u128(book.quote_decimals)) / (PRICE_SCALE * pow10_u128(book.base_decimals));
 
             // bounds check before casting
             assert!(trade_value_u128 <= U64_MAX, E_INSUFFICIENT_LIQUIDITY);
@@ -442,8 +474,8 @@ public entry fun place_bid<Base, Quote>(
             let worst = vector::pop_back(&mut book.bids);
             let unmatched = worst.quantity - worst.filled;
             if (unmatched > 0) {
-                let refund_quote =
-                    ((unmatched as u128) * (worst.price as u128) / PRICE_SCALE) as u64;
+                let refund_quote_u128 = ((unmatched as u128) * (worst.price as u128) * pow10_u128(book.quote_decimals)) / (PRICE_SCALE * pow10_u128(book.base_decimals));
+                let refund_quote = if (refund_quote_u128 <= U64_MAX) { refund_quote_u128 as u64 } else { 0u64 };
                 if (refund_quote > 0) {
                     let refund = balance::split(&mut book.quote_balance, refund_quote);
                     transfer::public_transfer(
@@ -533,7 +565,8 @@ public entry fun place_ask<Base, Quote>(
             let match_price = bid.price;
             let matched_u128 = (matched as u128);
             let price_u128 = (match_price as u128);
-            let trade_value_u128 = (matched_u128 * price_u128) / PRICE_SCALE;
+            // trade_value = matched * price / PRICE_SCALE adjusted for decimals
+            let trade_value_u128 = (matched_u128 * price_u128 * pow10_u128(book.quote_decimals)) / (PRICE_SCALE * pow10_u128(book.base_decimals));
 
             // bounds check before casting
             assert!(trade_value_u128 <= U64_MAX, E_INSUFFICIENT_LIQUIDITY);
@@ -665,8 +698,8 @@ public entry fun cancel_order<Base, Quote>(
 
             // Calculate unmatched amount to refund
             let unmatched_quantity = bid.quantity - bid.filled;
-            let unmatched_quote =
-                ((unmatched_quantity as u128) * (bid.price as u128) / PRICE_SCALE) as u64;
+            let unmatched_quote_u128 = ((unmatched_quantity as u128) * (bid.price as u128) * pow10_u128(book.quote_decimals)) / (PRICE_SCALE * pow10_u128(book.base_decimals));
+            let unmatched_quote = if (unmatched_quote_u128 <= U64_MAX) { unmatched_quote_u128 as u64 } else { 0u64 };
 
             // Remove order first
             vector::remove(&mut book.bids, i);
@@ -801,6 +834,30 @@ public fun calculate_quote_amount(base_amount: u64, price: u64): u64 {
 /// Calculate base amount for given quote amount at price
 public fun calculate_base_amount(quote_amount: u64, price: u64): u64 {
     ((quote_amount as u128) * PRICE_SCALE / (price as u128)) as u64
+}
+
+/// Decimals-aware quote amount calculation
+public fun calculate_quote_amount_with_decimals(
+    base_amount: u64,
+    price: u64,
+    base_decimals: u8,
+    quote_decimals: u8,
+): u64 {
+    let res_u128 = ((base_amount as u128) * (price as u128) * pow10_u128(quote_decimals)) / (PRICE_SCALE * pow10_u128(base_decimals));
+    assert!(res_u128 <= U64_MAX, E_INSUFFICIENT_LIQUIDITY);
+    res_u128 as u64
+}
+
+/// Decimals-aware base amount calculation
+public fun calculate_base_amount_with_decimals(
+    quote_amount: u64,
+    price: u64,
+    base_decimals: u8,
+    quote_decimals: u8,
+): u64 {
+    let res_u128 = ((quote_amount as u128) * (PRICE_SCALE) * pow10_u128(base_decimals)) / ((price as u128) * pow10_u128(quote_decimals));
+    assert!(res_u128 <= U64_MAX, E_INVALID_PRICE);
+    res_u128 as u64
 }
 
 /// Get all bids in the order book

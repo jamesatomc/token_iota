@@ -12,8 +12,8 @@ import QuickTrade from "./QuickTrade";
 import PriceChart from "./PriceChart";
 
 export default function DeepBookInterface() {
-  const [feeBps] = useState(30);
-  const [maxDepth] = useState(1000);
+  const [feeBps] = useState(10);
+  const [maxDepth] = useState(10000);
   const [loadingCreate, setLoadingCreate] = useState(false);
 
   const [bookId, setBookId] = useState("");
@@ -38,6 +38,12 @@ export default function DeepBookInterface() {
 
   // Price history (mid prices) for the selected book
   const [priceHistory, setPriceHistory] = useState<Array<{ ts: number; price: number }>>([]);
+  // Max history window (minutes) to keep in memory for chart
+  const [maxHistoryMinutes, setMaxHistoryMinutes] = useState<number>(60);
+  const [lastUpdatedTs, setLastUpdatedTs] = useState<number | null>(null);
+  // Chart range selection for historical view: minute, day, month and year ranges plus full
+  // keys: 1m,5m,10m (minutes), 1d,7d (days), 1mo,3mo (months approx), 1y (year), all
+  const [chartRange, setChartRange] = useState<"1m" | "5m" | "10m" | "1d" | "7d" | "1mo" | "3mo" | "1y" | "all">("10m");
 
   // Registered trading pairs from registry
   const [registeredPairs, setRegisteredPairs] = useState<Array<{
@@ -232,8 +238,13 @@ export default function DeepBookInterface() {
 
             if (mid !== undefined && mounted) {
               setPriceHistory((prev) => {
-                const next = prev.concat({ ts: Date.now(), price: mid! });
-                return next.slice(-60);
+                const now = Date.now();
+                const merged = prev.concat({ ts: now, price: mid! });
+                // prune by time window (maxHistoryMinutes)
+                const cutoff = now - maxHistoryMinutes * 60_000;
+                const pruned = merged.filter((p) => p.ts >= cutoff);
+                setLastUpdatedTs(now);
+                return pruned;
               });
             }
           } catch {
@@ -485,14 +496,24 @@ export default function DeepBookInterface() {
       const registryId = CONTRACTS.REGISTRY_BOOK_ID;
       const objIdRegex = /^0x[0-9a-fA-F]{64}$/;
 
+      // Get actual decimals for base and quote tokens
+      const baseDecimals = getDecimals(baseToken);
+      const quoteDecimals = getDecimals(quoteToken);
+
       let callSpec: Parameters<typeof tx.moveCall>[0];
 
       if (registryId && registryId.trim() !== "" && objIdRegex.test(registryId)) {
-        // Use get_or_create_order_book with registry (returns existing or creates new)
+        // Use get_or_create_order_book_with_decimals (explicit decimals version)
         // This function returns the book address and prevents duplicate books
         callSpec = {
-          target: `${CONTRACTS.PACKAGE_ID}::${MODULES.DEEPBOOK}::${DEEPBOOK_FUNCTIONS.GET_OR_CREATE}`,
-          arguments: [tx.object(registryId), tx.pure.u64(feeBps), tx.pure.u64(maxDepth)],
+          target: `${CONTRACTS.PACKAGE_ID}::${MODULES.DEEPBOOK}::${DEEPBOOK_FUNCTIONS.GET_OR_CREATE_WITH_DECIMALS}`,
+          arguments: [
+            tx.object(registryId),
+            tx.pure.u64(feeBps),
+            tx.pure.u64(maxDepth),
+            tx.pure.u8(baseDecimals),
+            tx.pure.u8(quoteDecimals)
+          ],
           typeArguments: [baseToken, quoteToken],
         };
       } else if (registryId && registryId.trim() !== "") {
@@ -500,16 +521,26 @@ export default function DeepBookInterface() {
         console.warn("Configured registry id looks invalid, falling back to non-registry create:", registryId);
         alert("⚠️ Configured registry id is invalid. Falling back to direct create.\n\nTo use the registry:\n1. Deploy with: iota client call --package <PACKAGE_ID> --module DeepBook --function create_global_registry\n2. Copy the created GlobalOrderBookRegistry object ID\n3. Set it in CONTRACTS.REGISTRY_BOOK_ID in contracts.ts");
         callSpec = {
-          target: `${CONTRACTS.PACKAGE_ID}::${MODULES.DEEPBOOK}::${DEEPBOOK_FUNCTIONS.CREATE_ORDER_BOOK}`,
-          arguments: [tx.pure.u64(feeBps), tx.pure.u64(maxDepth)],
+          target: `${CONTRACTS.PACKAGE_ID}::${MODULES.DEEPBOOK}::${DEEPBOOK_FUNCTIONS.CREATE_ORDER_BOOK_WITH_DECIMALS}`,
+          arguments: [
+            tx.pure.u64(feeBps),
+            tx.pure.u64(maxDepth),
+            tx.pure.u8(baseDecimals),
+            tx.pure.u8(quoteDecimals)
+          ],
           typeArguments: [baseToken, quoteToken],
         };
       } else {
-        // No registry configured — call plain create (allows duplicate books)
+        // No registry configured — call plain create with explicit decimals
         console.warn("No registry configured. Using direct create (allows duplicate books).");
         callSpec = {
-          target: `${CONTRACTS.PACKAGE_ID}::${MODULES.DEEPBOOK}::${DEEPBOOK_FUNCTIONS.CREATE_ORDER_BOOK}`,
-          arguments: [tx.pure.u64(feeBps), tx.pure.u64(maxDepth)],
+          target: `${CONTRACTS.PACKAGE_ID}::${MODULES.DEEPBOOK}::${DEEPBOOK_FUNCTIONS.CREATE_ORDER_BOOK_WITH_DECIMALS}`,
+          arguments: [
+            tx.pure.u64(feeBps),
+            tx.pure.u64(maxDepth),
+            tx.pure.u8(baseDecimals),
+            tx.pure.u8(quoteDecimals)
+          ],
           typeArguments: [baseToken, quoteToken],
         };
       }
@@ -641,26 +672,92 @@ export default function DeepBookInterface() {
       // price is expected as normalized integer (price * PRICE_SCALE). In UI we expect user to supply normalized integer string or simple numeric — we accept raw string and attempt to parse as integer.
       const priceU64 = BigInt(price);
       // quantity may be entered as a decimal (e.g. 0.1). Parse to smallest units using base token decimals.
-      const baseDecimals = getDecimals(baseToken);
-      const quoteDecimals = getDecimals(quoteToken);
+      // Prefer on-chain decimals from the OrderBook object to match Move calculations
+      let baseDecimals = getDecimals(baseToken);
+      let quoteDecimals = getDecimals(quoteToken);
+      try {
+        const bookObj = await client.getObject({ id: bookId, options: { showContent: true } });
+        if (bookObj?.data?.content && "fields" in bookObj.data.content) {
+          const fields = bookObj.data.content.fields as Record<string, unknown>;
+          const tryNum = (v: unknown): number | undefined => {
+            if (v === undefined || v === null) return undefined;
+            try {
+              if (typeof v === 'number') return Number(v);
+              if (typeof v === 'string') return Number(v);
+              if (typeof v === 'object' && v !== null && 'toString' in v) return Number((v as { toString: () => string }).toString());
+            } catch {
+              return undefined;
+            }
+            return undefined;
+          };
+          const onchainBase = tryNum(fields.base_decimals ?? fields.baseDecimals ?? fields.base_decimals_u8);
+          const onchainQuote = tryNum(fields.quote_decimals ?? fields.quoteDecimals ?? fields.quote_decimals_u8);
+          if (typeof onchainBase === 'number' && !Number.isNaN(onchainBase)) baseDecimals = onchainBase;
+          if (typeof onchainQuote === 'number' && !Number.isNaN(onchainQuote)) quoteDecimals = onchainQuote;
+
+          console.log('📊 Order Book Decimals Check:');
+          console.log(`  On-chain base_decimals: ${onchainBase} (expected: ${getDecimals(baseToken)})`);
+          console.log(`  On-chain quote_decimals: ${onchainQuote} (expected: ${getDecimals(quoteToken)})`);
+
+          // Alert if decimals mismatch
+          if (onchainBase !== getDecimals(baseToken) || onchainQuote !== getDecimals(quoteToken)) {
+            console.warn('⚠️ DECIMALS MISMATCH! Order book has wrong decimals!');
+            console.warn(`  This order book was created with base=${onchainBase}, quote=${onchainQuote}`);
+            console.warn(`  But tokens actually have base=${getDecimals(baseToken)}, quote=${getDecimals(quoteToken)}`);
+            console.warn('  You need to create a NEW order book with correct decimals!');
+
+            setLoadingOrder(false);
+            alert(`❌ WRONG ORDER BOOK DECIMALS!\n\n` +
+              `This order book was created with incorrect decimal settings:\n` +
+              `• On-chain base_decimals: ${onchainBase} (should be ${getDecimals(baseToken)})\n` +
+              `• On-chain quote_decimals: ${onchainQuote} (should be ${getDecimals(quoteToken)})\n\n` +
+              `This will cause WRONG AMOUNTS in transactions!\n\n` +
+              `SOLUTION:\n` +
+              `1. Click "Get or Create Order Book" button above\n` +
+              `2. It will create a NEW order book with CORRECT decimals\n` +
+              `3. The new book will show in the dropdown list\n` +
+              `4. Select it and try again\n\n` +
+              `DO NOT use this old order book!`);
+            return;
+          }
+        }
+      } catch (err) {
+        console.warn('Failed to fetch order book decimals, falling back to token decimals', err);
+      }
       const quantityU64 = BigInt(parseAmount(quantity, baseDecimals));
+
+      // helper to compute quote amount (smallest units) with correct decimal adjustment and rounding-up
+      const computeQuoteRequired = (qBaseUnits: bigint, pNorm: bigint, baseDec: number, quoteDec: number) => {
+        // Match Move implementation exactly: floor((quantity * price * 10^{quote_decimals}) / (PRICE_SCALE * 10^{base_decimals}))
+        const priceScale = BigInt(DEEPBOOK.PRICE_SCALE as number);
+        const diff = quoteDec - baseDec;
+        let numerator = qBaseUnits * pNorm;
+        let denominator = priceScale;
+        if (diff > 0) numerator = numerator * (BigInt(10) ** BigInt(diff));
+        else if (diff < 0) denominator = denominator * (BigInt(10) ** BigInt(-diff));
+        // floor division (BigInt division is floor by default for positive ints)
+        return numerator / denominator;
+      };
 
       // Build coin input depending on side
       if (side === "bid") {
         // payment: Coin<Quote> (quote token provided by taker). If quote is IOTA, split from gas.
         let coinIn;
+        const requiredQuote = computeQuoteRequired(quantityU64, priceU64, baseDecimals, quoteDecimals);
+
+        // Basic validation
+        if (requiredQuote <= BigInt(0)) {
+          alert("❌ Computed required quote amount is zero. Price/quantity too small. Increase quantity or price.");
+          setLoadingOrder(false);
+          return;
+        }
+
+        console.debug("place order (bid) computed requiredQuote:", requiredQuote.toString());
+
         if (quoteToken === CONTRACTS.IOTA.TYPE) {
-          // requiredQuote in quote subunits = (quantity_sub * price_norm / PRICE_SCALE)
-          const priceScale = BigInt(DEEPBOOK.PRICE_SCALE as number);
-          let requiredQuote = (quantityU64 * priceU64) / priceScale;
-          const diff = quoteDecimals - baseDecimals;
-          if (diff > 0) {
-            requiredQuote = requiredQuote * (BigInt(10) ** BigInt(diff));
-          } else if (diff < 0) {
-            requiredQuote = requiredQuote / (BigInt(10) ** BigInt(-diff));
-          }
-          const reqStr = requiredQuote.toString();
-          [coinIn] = tx.splitCoins(tx.gas, [reqStr]);
+          // Add 1% buffer for slippage/gas, rounded up
+          const buffer = (requiredQuote * BigInt(101) + BigInt(99)) / BigInt(100);
+          [coinIn] = tx.splitCoins(tx.gas, [buffer.toString()]);
         } else {
           // fetch coins for quoteToken
           const coins = await client.getCoins({ owner: currentAccount.address, coinType: quoteToken });
@@ -673,20 +770,13 @@ export default function DeepBookInterface() {
           if (rest.length > 0) {
             tx.mergeCoins(tx.object(primary.coinObjectId), rest.map((c) => tx.object(c.coinObjectId)));
           }
-          // split exact amount; compute required
-          const priceScale = BigInt(DEEPBOOK.PRICE_SCALE as number);
-          let requiredQuote = (quantityU64 * priceU64) / priceScale;
-          const diff = quoteDecimals - baseDecimals;
-          if (diff > 0) {
-            requiredQuote = requiredQuote * (BigInt(10) ** BigInt(diff));
-          } else if (diff < 0) {
-            requiredQuote = requiredQuote / (BigInt(10) ** BigInt(-diff));
-          }
-          [coinIn] = tx.splitCoins(tx.object(primary.coinObjectId), [requiredQuote.toString()]);
+
+          // Add 1% buffer for slippage/gas and round up
+          const buffer = (requiredQuote * BigInt(101) + BigInt(99)) / BigInt(100);
+          [coinIn] = tx.splitCoins(tx.object(primary.coinObjectId), [buffer.toString()]);
         }
 
         // Move signature: place_bid(book: &mut OrderBook<Base,Quote>, price: u64, quantity: u64, payment: Coin<Quote>, ctx: &mut TxContext)
-        // So arguments must be [book, price, quantity, payment]
         const callSpec = {
           target: `${CONTRACTS.PACKAGE_ID}::${MODULES.DEEPBOOK}::${DEEPBOOK_FUNCTIONS.PLACE_BID}`,
           arguments: [tx.object(bookId), tx.pure.u64(priceU64.toString()), tx.pure.u64(quantityU64.toString()), coinIn],
@@ -697,9 +787,10 @@ export default function DeepBookInterface() {
       } else {
         // ask: base_coin: Coin<Base>
         let coinIn;
+
+        // For asks the required base is simply the quantity in base smallest units
         if (baseToken === CONTRACTS.IOTA.TYPE) {
-          const requiredBase = quantityU64.toString();
-          [coinIn] = tx.splitCoins(tx.gas, [requiredBase]);
+          [coinIn] = tx.splitCoins(tx.gas, [quantityU64.toString()]);
         } else {
           const coins = await client.getCoins({ owner: currentAccount.address, coinType: baseToken });
           if (!coins || !coins.data || coins.data.length === 0) {
@@ -711,6 +802,7 @@ export default function DeepBookInterface() {
           if (rest.length > 0) {
             tx.mergeCoins(tx.object(primary.coinObjectId), rest.map((c) => tx.object(c.coinObjectId)));
           }
+
           [coinIn] = tx.splitCoins(tx.object(primary.coinObjectId), [quantityU64.toString()]);
         }
 
@@ -764,7 +856,7 @@ export default function DeepBookInterface() {
   }, [signAndExecute, client, currentAccount, bookId, baseToken, quoteToken, price, quantity, side, humanPrice]);
 
   return (
-    <div className="min-h-[420px] w-full max-w-6xl mx-auto px-4">
+    <div className="min-h-[420px] w-full max-w-6xl mx-auto px-2 sm:px-4">
       <Card maxWidth="max-w-6xl" className="mx-auto">
         <div className="flex items-center justify-between mb-4">
           <div className="flex-1">
@@ -1104,8 +1196,17 @@ export default function DeepBookInterface() {
                     const baseDecimals = getDecimals(baseToken);
                     const quoteDecimals = getDecimals(quoteToken);
                     const q = BigInt(parseAmount(quantity || "0", baseDecimals));
-                    const quote = (q * p) / BigInt(DEEPBOOK.PRICE_SCALE as number);
-                    return formatAmount(quote, quoteDecimals);
+
+                    // compute quote smallest units with correct decimal adjustment and rounding-up
+                    const priceScale = BigInt(DEEPBOOK.PRICE_SCALE as number);
+                    const diff = quoteDecimals - baseDecimals;
+                    let numerator = q * p;
+                    let denominator = priceScale;
+                    if (diff > 0) numerator = numerator * (BigInt(10) ** BigInt(diff));
+                    else if (diff < 0) denominator = denominator * (BigInt(10) ** BigInt(-diff));
+                    const quoteSmall = (numerator + denominator - BigInt(1)) / denominator;
+
+                    return formatAmount(quoteSmall, quoteDecimals);
                   } catch {
                     return "-";
                   }
@@ -1142,31 +1243,103 @@ export default function DeepBookInterface() {
               <div className="text-sm font-medium text-gray-700">Price (mid)</div>
               <div className="text-xs text-gray-500">{priceHistory.length > 0 ? `${priceHistory[priceHistory.length - 1].price.toLocaleString(undefined, { maximumFractionDigits: 6 })} (human)` : '-'}</div>
             </div>
+            {/* Chart controls */}
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+                <div className="text-xs text-gray-500">History:</div>
+                <div className="flex flex-wrap gap-1">
+                  {[
+                    "1m",
+                    "5m",
+                    "10m",
+                    "1d",
+                    "7d",
+                    "1mo",
+                    "3mo",
+                    "1y",
+                    "all",
+                  ].map((r) => (
+                    <button key={r} onClick={() => setChartRange(r as any)} className={`px-2 py-1 rounded ${chartRange === r ? 'bg-blue-50 text-blue-700 border border-blue-200' : 'bg-white border border-gray-100 hover:border-gray-200'}`}>
+                      {r}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Indicators & controls */}
+                <div className="mt-2 sm:mt-0 sm:ml-4 flex items-center gap-3">
+                  <div className="text-xs text-gray-500">Samples: <span className="font-medium text-gray-900">{priceHistory.length}</span></div>
+                  <div className="text-xs text-gray-500">Last: <span className="font-medium text-gray-900">{lastUpdatedTs ? new Date(lastUpdatedTs).toLocaleTimeString() : '-'}</span></div>
+                  <button onClick={() => {
+                    // simulate sample data: generate 30 points spaced 10s apart
+                    const now = Date.now();
+                    const base = priceHistory.length > 0 ? priceHistory[priceHistory.length - 1].price : 0.1;
+                    const samples: Array<{ ts: number; price: number }> = [];
+                    for (let i = 29; i >= 0; i--) {
+                      const ts = now - i * 10000;
+                      // small random walk
+                      const noise = (Math.random() - 0.5) * base * 0.002;
+                      const price = Math.max(0, base + noise);
+                      samples.push({ ts, price });
+                    }
+                    setPriceHistory((prev) => {
+                      const merged = prev.concat(samples);
+                      const cutoff = Date.now() - maxHistoryMinutes * 60_000;
+                      const pruned = merged.filter((p) => p.ts >= cutoff);
+                      setLastUpdatedTs(Date.now());
+                      return pruned;
+                    });
+                  }} className="px-2 py-1 rounded bg-gray-50 border border-gray-200 text-xs">Simulate</button>
+                  <button onClick={() => { setPriceHistory([]); setLastUpdatedTs(null); }} className="px-2 py-1 rounded bg-white border border-gray-100 text-xs">Clear</button>
+                </div>
+              </div>
+              <div className="text-xs text-gray-500">{priceHistory.length > 0 ? `${priceHistory[priceHistory.length - 1].price.toLocaleString(undefined, { maximumFractionDigits: 6 })} (human)` : '-'}</div>
+            </div>
+
             {/* Responsive chart container: chart will fill available width */}
             <div style={{ width: '100%' }}>
-              <PriceChart data={priceHistory} height={96} />
+              {/* Determine displayed history based on selected range */}
+              {(() => {
+                const now = Date.now();
+                let windowMs = 0;
+                if (chartRange === '1m') windowMs = 60_000;
+                else if (chartRange === '5m') windowMs = 5 * 60_000;
+                else if (chartRange === '10m') windowMs = 10 * 60_000;
+                else if (chartRange === '1d') windowMs = 24 * 60 * 60_000; // 1 day
+                else if (chartRange === '7d') windowMs = 7 * 24 * 60 * 60_000; // 7 days
+                else if (chartRange === '1mo') windowMs = 30 * 24 * 60 * 60_000; // ~30 days
+                else if (chartRange === '3mo') windowMs = 90 * 24 * 60 * 60_000; // ~90 days
+                else if (chartRange === '1y') windowMs = 365 * 24 * 60 * 60_000; // ~365 days
+                // if 'all' windowMs stays 0 -> show full history
+                const displayed = windowMs > 0 ? priceHistory.filter((p) => (now - p.ts) <= windowMs) : priceHistory.slice();
+                return <PriceChart data={displayed} height={96} />;
+              })()}
             </div>
           </div>
-          {/* Quick Trade */}
-          <QuickTrade
-            bookId={bookId || bookSelect}
-            baseToken={baseToken}
-            quoteToken={quoteToken}
-            baseDecimals={getDecimals(baseToken)}
-            quoteDecimals={getDecimals(quoteToken)}
-            bestBidPrice={bestBidPrice}
-            bestAskPrice={bestAskPrice}
-            baseBalance={baseBalance}
-            quoteBalance={quoteBalance}
-          />
+          {/* Quick Trade and Order Book side-by-side on md+ */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div>
+              <QuickTrade
+                bookId={bookId || bookSelect}
+                baseToken={baseToken}
+                quoteToken={quoteToken}
+                baseDecimals={getDecimals(baseToken)}
+                quoteDecimals={getDecimals(quoteToken)}
+                bestBidPrice={bestBidPrice}
+                bestAskPrice={bestAskPrice}
+                baseBalance={baseBalance}
+                quoteBalance={quoteBalance}
+              />
+            </div>
 
-          {/* Order Book View */}
-          <OrderBookView
-            bookId={bookId || bookSelect}
-            baseToken={baseToken}
-            quoteToken={quoteToken}
-            baseDecimals={getDecimals(baseToken)}
-          />
+            <div>
+              <OrderBookView
+                bookId={bookId || bookSelect}
+                baseToken={baseToken}
+                quoteToken={quoteToken}
+                baseDecimals={getDecimals(baseToken)}
+              />
+            </div>
+          </div>
         </div>
       ) : null}
     </div>

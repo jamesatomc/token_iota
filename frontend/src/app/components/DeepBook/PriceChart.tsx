@@ -70,12 +70,40 @@ export default function PriceChart({ data, width = 300, height = 60, stroke = "#
   }
   const range = max - min || 1;
 
+  // Compute suitable fraction digits dynamically based on data range
+  const computeFractionDigits = (r: number, maxDigits = 6) => {
+    if (!isFinite(r) || r <= 0) return 2;
+    // If range >= 1, show 2 decimal places by default
+    if (r >= 1) return 2;
+    // For ranges < 1, increase digits so small differences are visible
+    // e.g. range = 0.1 -> ceil(-log10(0.1)) = 1 -> use 1 + 1 = 2
+    // range = 0.001 -> ceil(-log10(0.001)) = 3 -> use 3 + 1 = 4
+    const digits = Math.min(maxDigits, Math.max(2, Math.ceil(-Math.log10(r)) + 1));
+    return digits;
+  };
+
+  const priceFractionDigits = computeFractionDigits(range, 6);
+
+  const formatPrice = (v: number) => {
+    try {
+      return v.toLocaleString(undefined, { minimumFractionDigits: priceFractionDigits, maximumFractionDigits: 6 });
+    } catch {
+      return String(v);
+    }
+  };
+
   // Map points to svg coords
-  const pad = 4;
+  // Marker radius and horizontal padding
+  const markerR = 3.5;
+  const pad = Math.max(8, Math.ceil(markerR + 4));
   const w = Math.max(20, containerWidth || width);
-  const h = Math.max(12, height);
+  // core chart drawing height (controls vertical scale of plotted area)
+  const chartH = Math.max(12, height);
+  // add extra bottom space so labels / markers are not clipped by the SVG viewport
+  const extraBottom = 20; // px
+  const svgH = chartH + extraBottom;
   const innerW = w - pad * 2;
-  const innerH = h - pad * 2;
+  const innerH = chartH - pad * 2;
 
   const step = innerW / Math.max(1, prices.length - 1);
   const numericPoints = prices.map((p, i) => {
@@ -102,11 +130,13 @@ export default function PriceChart({ data, width = 300, height = 60, stroke = "#
   const handleMouseLeave = () => setHoverIndex(null);
 
   return (
-    <div ref={containerRef} style={{ position: "relative", width: w, height: h }}>
+    // Make the outer container fluid so the chart fills available width responsively.
+    // SVG uses a viewBox so internal coords stay consistent while the visual scales.
+    <div ref={containerRef} style={{ position: "relative", width: '100%', height: svgH, overflow: 'visible' }}>
       <svg
-        width={w}
-        height={h}
-        viewBox={`0 0 ${w} ${h}`}
+        width="100%"
+        height={svgH}
+        viewBox={`0 0 ${w} ${svgH}`}
         preserveAspectRatio="none"
         aria-hidden
         onMouseMove={handleMouseMove}
@@ -130,8 +160,8 @@ export default function PriceChart({ data, width = 300, height = 60, stroke = "#
         {pathD && <path d={pathD} fill="none" stroke={stroke} strokeWidth={2} strokeLinejoin="round" strokeLinecap="round" />}
 
         {/* y-axis labels (max at top, min at bottom) */}
-        <text x={6} y={pad + 10} fontSize={10} fill="#6b7280">{max.toLocaleString(undefined, { maximumFractionDigits: 6 })}</text>
-        <text x={6} y={pad + innerH} fontSize={10} fill="#6b7280">{min.toLocaleString(undefined, { maximumFractionDigits: 6 })}</text>
+        <text x={6} y={pad + 10} fontSize={10} fill="#6b7280">{formatPrice(max)}</text>
+        <text x={6} y={pad + innerH} fontSize={10} fill="#6b7280">{formatPrice(min)}</text>
 
         {/* current price horizontal line */}
         {numericPoints.length > 0 && (
@@ -139,14 +169,14 @@ export default function PriceChart({ data, width = 300, height = 60, stroke = "#
             <line x1={pad} x2={pad + innerW} y1={numericPoints[numericPoints.length - 1].y} y2={numericPoints[numericPoints.length - 1].y} stroke={stroke} strokeWidth={1} strokeDasharray="4 4" strokeOpacity={0.9} />
             {/* price label on right */}
             <rect x={pad + innerW - 72} y={numericPoints[numericPoints.length - 1].y - 12} width={72} height={20} rx={6} fill={stroke} opacity={0.95} />
-            <text x={pad + innerW - 36} y={numericPoints[numericPoints.length - 1].y + 4} fontSize={11} fill="#ffffff" textAnchor="middle">{numericPoints[numericPoints.length - 1].p.toLocaleString(undefined, { maximumFractionDigits: 6 })}</text>
+            <text x={pad + innerW - 36} y={numericPoints[numericPoints.length - 1].y + 4} fontSize={11} fill="#ffffff" textAnchor="middle">{formatPrice(numericPoints[numericPoints.length - 1].p)}</text>
           </>
         )}
 
         {/* Hover marker */}
         {hoverIndex !== null && numericPoints[hoverIndex] && (
           <g>
-            <circle cx={numericPoints[hoverIndex].x} cy={numericPoints[hoverIndex].y} r={3.5} fill={stroke} stroke="#fff" strokeWidth={1} />
+            <circle cx={numericPoints[hoverIndex].x} cy={numericPoints[hoverIndex].y} r={markerR} fill={stroke} stroke="#fff" strokeWidth={1} />
           </g>
         )}
 
@@ -171,11 +201,12 @@ export default function PriceChart({ data, width = 300, height = 60, stroke = "#
         (() => {
           const pt = numericPoints[hoverIndex];
           const left = Math.max(8, Math.min(w - 120, pt.x + 4));
-          const top = Math.max(4, pt.y - 30);
+          // ensure tooltip stays within the visible svg area including extraBottom
+          const top = Math.max(4, Math.min(svgH - 8 - 40, pt.y - 30));
           return (
             <div style={{ position: "absolute", left, top, pointerEvents: "none", background: "rgba(17,24,39,0.95)", color: "#fff", padding: '6px 8px', borderRadius: 6, fontSize: 12, minWidth: 96 }}>
               <div style={{ fontSize: 11, opacity: 0.9 }}>{new Date(pt.ts).toLocaleString()}</div>
-              <div style={{ fontWeight: 600 }}>{pt.p.toLocaleString(undefined, { maximumFractionDigits: 6 })}</div>
+              <div style={{ fontWeight: 600 }}>{formatPrice(pt.p)}</div>
             </div>
           );
         })()
