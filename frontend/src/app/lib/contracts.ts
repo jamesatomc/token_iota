@@ -85,6 +85,7 @@ export const DEX_FUNCTIONS = {
   GET_MINIMUM_LIQUIDITY: "get_minimum_liquidity",
   GET_BURNED_MINIMUM_LIQUIDITY: "get_burned_minimum_liquidity",
   GET_BURN_RESERVE_ADDRESS: "get_burn_reserve_address",
+  GET_BURN_RESERVE: "get_burn_reserve",
   GET_RESERVES_U128: "get_reserves_u128",
   POOL_EXISTS: "pool_exists",
   GET_POOL_ADDRESS: "get_pool_address",

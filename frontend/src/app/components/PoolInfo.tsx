@@ -166,14 +166,62 @@ export default function PoolInfo() {
         const burnAddr = extractOptionAddress(rawBurn);
 
         if (burnAddr) {
+          // Prefer a read-only Move call if the SDK/client supports it. If not available
+          // or it fails, fall back to fetching the burn object via getObject (existing behavior).
+          const cliAny = client as any;
+          let usedFallback = false;
           try {
-            const burnObj = await client.getObject({ id: burnAddr, options: { showContent: true } });
-            if (burnObj.data?.content?.dataType === "moveObject") {
-              const bfields = burnObj.data.content.fields as Record<string, unknown> | undefined;
-              if (bfields?.amount) burnedAmountStr = String(bfields.amount);
+            let readRes: any = null;
+            // Try common SDK method names (callReadOnly / readMove) with a safe payload
+            if (cliAny && typeof cliAny.callReadOnly === "function") {
+              readRes = await cliAny.callReadOnly({
+                package: CONTRACTS.PACKAGE_ID,
+                module: MODULES.DEX,
+                function: DEX_FUNCTIONS.GET_BURN_RESERVE,
+                arguments: [burnAddr],
+                typeArguments: [],
+              });
+            } else if (cliAny && typeof cliAny.readMove === "function") {
+              readRes = await cliAny.readMove({
+                package: CONTRACTS.PACKAGE_ID,
+                module: MODULES.DEX,
+                function: DEX_FUNCTIONS.GET_BURN_RESERVE,
+                arguments: [burnAddr],
+                typeArguments: [],
+              });
+            }
+
+            // Interpret a variety of response shapes conservatively
+            if (readRes != null) {
+              if (typeof readRes === "string" || typeof readRes === "number") {
+                burnedAmountStr = String(readRes);
+              } else if (Array.isArray(readRes) && readRes.length > 0) {
+                burnedAmountStr = String(readRes[0]);
+              } else if (typeof readRes === "object") {
+                // Common wrappers: { result: <val> } or { value: <val> }
+                if (readRes.result != null) burnedAmountStr = String(readRes.result);
+                else if (readRes.value != null) burnedAmountStr = String(readRes.value);
+                else if (readRes.Ok != null) burnedAmountStr = String(readRes.Ok);
+              }
+            } else {
+              usedFallback = true;
             }
           } catch (err) {
-            console.warn("Failed to fetch burn reserve object:", err);
+            // SDK read failed — mark to use fallback
+            usedFallback = true;
+            console.warn("Read-only move call for burn reserve failed, falling back to getObject:", err);
+          }
+
+          if (usedFallback) {
+            try {
+              const burnObj = await client.getObject({ id: burnAddr, options: { showContent: true } });
+              if (burnObj.data?.content?.dataType === "moveObject") {
+                const bfields = burnObj.data.content.fields as Record<string, unknown> | undefined;
+                if (bfields?.amount) burnedAmountStr = String(bfields.amount);
+              }
+            } catch (err) {
+              console.warn("Failed to fetch burn reserve object:", err);
+            }
           }
         }
 
