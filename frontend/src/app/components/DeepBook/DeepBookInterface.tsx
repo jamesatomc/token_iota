@@ -39,11 +39,24 @@ export default function DeepBookInterface() {
   // Price history (mid prices) for the selected book
   const [priceHistory, setPriceHistory] = useState<Array<{ ts: number; price: number }>>([]);
   // Max history window (minutes) to keep in memory for chart
-  const [maxHistoryMinutes, setMaxHistoryMinutes] = useState<number>(60);
+  // setter not used — keep only the value to avoid unused variable lint
+  const [maxHistoryMinutes] = useState<number>(60);
   const [lastUpdatedTs, setLastUpdatedTs] = useState<number | null>(null);
   // Chart range selection for historical view: minute, day, month and year ranges plus full
   // keys: 1m,5m,10m (minutes), 1d,7d (days), 1mo,3mo (months approx), 1y (year), all
   const [chartRange, setChartRange] = useState<"1m" | "5m" | "10m" | "1d" | "7d" | "1mo" | "3mo" | "1y" | "all">("10m");
+  // Typed list of history ranges to avoid `any` casts
+  const HISTORY_RANGES: ("1m" | "5m" | "10m" | "1d" | "7d" | "1mo" | "3mo" | "1y" | "all")[] = [
+    "1m",
+    "5m",
+    "10m",
+    "1d",
+    "7d",
+    "1mo",
+    "3mo",
+    "1y",
+    "all",
+  ];
 
   // Registered trading pairs from registry
   const [registeredPairs, setRegisteredPairs] = useState<Array<{
@@ -262,7 +275,7 @@ export default function DeepBookInterface() {
       mounted = false;
       clearInterval(iv);
     };
-  }, [bookId, bookSelect, client]);
+  }, [bookId, bookSelect, client, maxHistoryMinutes]);
 
   // Fetch registered trading pairs from registry
   useEffect(() => {
@@ -1248,18 +1261,8 @@ export default function DeepBookInterface() {
               <div className="flex flex-col sm:flex-row sm:items-center gap-3">
                 <div className="text-xs text-gray-500">History:</div>
                 <div className="flex flex-wrap gap-1">
-                  {[
-                    "1m",
-                    "5m",
-                    "10m",
-                    "1d",
-                    "7d",
-                    "1mo",
-                    "3mo",
-                    "1y",
-                    "all",
-                  ].map((r) => (
-                    <button key={r} onClick={() => setChartRange(r as any)} className={`px-2 py-1 rounded ${chartRange === r ? 'bg-blue-50 text-blue-700 border border-blue-200' : 'bg-white border border-gray-100 hover:border-gray-200'}`}>
+                  {HISTORY_RANGES.map((r) => (
+                    <button key={r} onClick={() => setChartRange(r)} className={`px-2 py-1 rounded ${chartRange === r ? 'bg-blue-50 text-blue-700 border border-blue-200' : 'bg-white border border-gray-100 hover:border-gray-200'}`}>
                       {r}
                     </button>
                   ))}
