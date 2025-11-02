@@ -27,6 +27,8 @@ type Props = {
 
 export default function PriceOracleControls({ poolId, tokenXTypeFull, tokenYTypeFull, client, currentAccount, signAndExecute }: Props) {
     const [oracleId, setOracleId] = useState("");
+    // known oracles saved locally (id + optional pool association)
+    const [knownOracles, setKnownOracles] = useState<Array<{ id: string; pool?: string }>>([]);
     const [oracleMaxObservations, setOracleMaxObservations] = useState<number>(100);
     const [oracleInfo, setOracleInfo] = useState<{ observations?: number } | null>(null);
     const [loading, setLoading] = useState(false);
@@ -148,6 +150,157 @@ export default function PriceOracleControls({ poolId, tokenXTypeFull, tokenYType
         }
     };
 
+    // Local storage helpers for known oracles
+    const loadKnownOracles = () => {
+        try {
+            const raw = localStorage.getItem("known_oracles_v1");
+            if (!raw) return setKnownOracles([]);
+            const arr = JSON.parse(raw) as Array<{ id: string; pool?: string }>;
+            setKnownOracles(Array.isArray(arr) ? arr : []);
+        } catch (e) {
+            console.warn("Failed to load known oracles", e);
+            setKnownOracles([]);
+        }
+    };
+
+    // Load known oracles from on-chain events (OracleCreated)
+    const loadKnownOraclesFromChain = React.useCallback(async () => {
+        try {
+            // helper: queryEvents with fallback
+            const queryEventsWithFallback = async (clientObj: unknown, eventType: string, limit = 100) => {
+                const cli = clientObj as { queryEvents?: (opts: unknown) => Promise<unknown> } | null;
+                if (!cli || typeof cli.queryEvents !== "function") throw new Error("client.queryEvents not available");
+                try { return await cli.queryEvents({ query: { MoveEventType: eventType }, limit }); }
+                catch (e1) {
+                    try { return await cli.queryEvents({ query: { moveEventType: eventType }, limit }); } catch { throw e1; }
+                }
+            };
+
+            // helper: extract oracle and pool ids from event
+            const getOracleFromEvent = (event: unknown): { id: string | null; pool?: string | null } => {
+                if (!event || typeof event !== "object") return { id: null };
+                const evt = event as Record<string, unknown>;
+                const parsed = evt.parsedJson;
+                if (!parsed) return { id: null };
+                if (typeof parsed === "string") {
+                    try {
+                        const obj = JSON.parse(parsed) as Record<string, unknown>;
+                        return {
+                            id: String(obj.oracle_id ?? obj.oracleId ?? (obj.fields as Record<string, unknown>)?.oracle_id ?? "") || null,
+                            pool: String(obj.pool_id ?? obj.poolId ?? (obj.fields as Record<string, unknown>)?.pool_id ?? "") || null,
+                        };
+                    } catch { return { id: null }; }
+                }
+                if (typeof parsed === "object") {
+                    const p = parsed as Record<string, unknown>;
+                    return {
+                        id: String(p.oracle_id ?? p.oracleId ?? (p.fields as Record<string, unknown>)?.oracle_id ?? (p.data as Record<string, unknown>)?.oracle_id ?? "") || null,
+                        pool: String(p.pool_id ?? p.poolId ?? (p.fields as Record<string, unknown>)?.pool_id ?? (p.data as Record<string, unknown>)?.pool_id ?? "") || null,
+                    };
+                }
+                return { id: null };
+            };
+
+            const eventType = `${CONTRACTS.PACKAGE_ID}::${MODULES.PRICE_ORACLE}::OracleCreated`;
+            const resp = await queryEventsWithFallback(client, eventType, 200);
+
+            const respObj = resp && typeof resp === "object" ? (resp as Record<string, unknown>) : {};
+            const events = Array.isArray(respObj.data) ? (respObj.data as unknown[]) : [];
+
+            const found: Array<{ id: string; pool?: string }> = [];
+            for (const ev of events) {
+                const o = getOracleFromEvent(ev);
+                if (!o.id) continue;
+                if (!found.find((x) => x.id === o.id)) found.push({ id: o.id, pool: o.pool ?? undefined });
+            }
+
+            if (found.length > 0) {
+                const raw = localStorage.getItem("known_oracles_v1");
+                const local = raw ? (JSON.parse(raw) as Array<{ id: string; pool?: string }>) : [];
+                const merged = [...found];
+                for (const l of local) if (!merged.find((m) => m.id === l.id)) merged.push(l);
+                setKnownOracles(merged.slice(0, 50));
+                try { localStorage.setItem("known_oracles_v1", JSON.stringify(merged.slice(0, 50))); } catch { /* ignore */ }
+                return;
+            }
+
+            loadKnownOracles();
+        } catch (e) {
+            console.warn("Failed to fetch oracles from chain, falling back to local storage", e);
+            loadKnownOracles();
+        }
+    }, [client]);
+
+    const saveOracleLocal = (id: string, pool?: string) => {
+        if (!id) return;
+        try {
+            const raw = localStorage.getItem("known_oracles_v1");
+            const arr = raw ? (JSON.parse(raw) as Array<{ id: string; pool?: string }>) : [];
+            const exists = arr.find((o) => o.id === id);
+            if (!exists) {
+                arr.unshift({ id, pool });
+                // keep up to 20 entries
+                localStorage.setItem("known_oracles_v1", JSON.stringify(arr.slice(0, 20)));
+                setKnownOracles(arr.slice(0, 20));
+            }
+        } catch (e) {
+            console.warn("Failed to save known oracle", e);
+        }
+    };
+
+    // initialize known oracles on mount: try on-chain first, then fallback to localStorage
+    React.useEffect(() => {
+        let mounted = true;
+        (async () => {
+            if (!mounted) return;
+            try {
+                await loadKnownOraclesFromChain();
+            } catch {
+                try { loadKnownOracles(); } catch { /* ignore */ }
+            }
+        })();
+
+        return () => { mounted = false; };
+    }, [loadKnownOraclesFromChain]);
+
+    // Prepare grouped, deduplicated oracle list for the select control
+    const uniqueKnownOracles = React.useMemo(() => {
+        const map = new Map<string, { id: string; pool?: string }>();
+        for (const o of knownOracles) {
+            if (!o || !o.id) continue;
+            if (!map.has(o.id)) map.set(o.id, o);
+        }
+        return Array.from(map.values());
+    }, [knownOracles]);
+
+    const groupedOracles = React.useMemo(() => {
+        const groups: Record<string, Array<{ id: string; pool?: string }>> = {};
+        for (const o of uniqueKnownOracles) {
+            const key = o.pool || "__other__";
+            if (!groups[key]) groups[key] = [];
+            groups[key].push(o);
+        }
+        // make an ordered list: current pool first (if present), then other pools alphabetically, then __other__
+        const orderedKeys: string[] = [];
+        if (poolId && groups[poolId]) orderedKeys.push(poolId);
+        const otherKeys = Object.keys(groups).filter((k) => k !== poolId && k !== "__other__").sort();
+        orderedKeys.push(...otherKeys);
+        if (groups["__other__"]) orderedKeys.push("__other__");
+
+        return orderedKeys.map((k) => ({ key: k, items: groups[k] }));
+    }, [uniqueKnownOracles, poolId]);
+
+    const shortId = (id: string) => {
+        if (!id) return "";
+        if (id.length <= 18) return id;
+        return `${id.slice(0, 8)}...${id.slice(-8)}`;
+    };
+
+    const poolOracles = React.useMemo(() => {
+        if (!poolId) return [] as Array<{ id: string; pool?: string }>;
+        return uniqueKnownOracles.filter((o) => o.pool === poolId);
+    }, [uniqueKnownOracles, poolId]);
+
     const fetchTwapAtTime = async () => {
         if (!oracleId) return alert("Please enter an oracle ID");
         if (!tokenXTypeFull || !tokenYTypeFull) return alert("Fetch pool to auto-detect token types first");
@@ -208,7 +361,36 @@ export default function PriceOracleControls({ poolId, tokenXTypeFull, tokenYType
 
                 <div className="sm:col-span-1">
                     <label className="text-xs text-gray-600">Oracle ID</label>
-                    <input type="text" value={oracleId} onChange={(e) => setOracleId(e.target.value)} placeholder="0x..." className="w-full mt-1 px-3 py-2 rounded-lg border border-gray-200" />
+                    <div className="flex gap-2 items-center">
+                        <select
+                            className="w-full mt-1 px-3 py-2 rounded-lg border border-gray-200 bg-white"
+                            value={oracleId || ""}
+                            onChange={(e) => setOracleId(e.target.value)}
+                        >
+                            <option value="">-- choose or enter --</option>
+                            {poolId ? (
+                                poolOracles.length > 0 ? (
+                                    poolOracles.map((o) => (
+                                        <option key={o.id} value={o.id}>{shortId(o.id)}</option>
+                                    ))
+                                ) : (
+                                    <option disabled>-- no known oracles for this pool --</option>
+                                )
+                            ) : (
+                                groupedOracles.map((grp) => (
+                                    <optgroup key={grp.key} label={grp.key === "__other__" ? "Other" : shortId(grp.key)}>
+                                        {grp.items.map((o) => (
+                                            <option key={o.id} value={o.id}>{shortId(o.id)}</option>
+                                        ))}
+                                    </optgroup>
+                                ))
+                            )}
+                        </select>
+                    </div>
+                    <div className="mt-2 flex gap-2">
+                        <button type="button" onClick={() => saveOracleLocal(oracleId, poolId || undefined)} disabled={!oracleId} className="px-3 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:bg-gray-200">Save</button>
+                        <button type="button" onClick={() => { setOracleId(""); }} className="px-3 py-2 border border-gray-200 rounded-lg hover:bg-gray-50">Clear</button>
+                    </div>
                 </div>
             </div>
 

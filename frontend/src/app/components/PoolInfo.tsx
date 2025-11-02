@@ -68,10 +68,7 @@ export default function PoolInfo() {
   // new: labels for tokens (defaults kept for backward compatibility)
   const [tokenXLabel, setTokenXLabel] = useState("KANARI");
   const [tokenYLabel, setTokenYLabel] = useState("IOTA");
-  // Oracle UI state is handled by `PriceOracleControls` component
-  // manual/override token type args (allow user to query pool by types)
-  // (removed unused inputs — token types are detected from the pool object)
-  // UI helper state for burn/reserved info
+
   const [poolUi, setPoolUi] = useState<{ burnAddr?: string; burnedAmount?: string; activeLp?: string } | null>(null);
 
   const client = useIotaClient();
@@ -314,193 +311,194 @@ export default function PoolInfo() {
 
 
   return (
-    // container: responsive padding, max width and centered
-    <Card maxWidth="max-w-md" minHeight="min-h-[560px]" className="shadow-sm mx-auto w-full">
-      <h2 className="text-2xl font-bold mb-6 text-gray-900">Pool Information</h2>
+    <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+      {/* Left: Pool Information card */}
+      <div>
+        <Card maxWidth="max-w-md" minHeight="min-h-[560px]" className="shadow-sm mx-auto w-full">
+          <h2 className="text-2xl font-bold mb-6 text-gray-900">Pool Information</h2>
 
-      {/* Page lock removed — Pool info visible by default */}
+          {/* Page lock removed — Pool info visible by default */}
 
-      <div className="mb-4">
-        <label className="block text-sm font-medium mb-2 text-zinc-700">
-          Pool ID
-        </label>
+          <div className="mb-4">
+            <label className="block text-sm font-medium mb-2 text-zinc-700">Pool ID</label>
 
-        {/* Dropdown to pick a pool (falls back to manual input) */}
-        <div className="flex flex-col gap-2">
-          <div className="flex flex-col sm:flex-row gap-2 items-center w-full">
-            <select
-              value={availablePools.find((p) => p.poolId === poolId) ? poolId : ""}
-              onChange={(e) => setPoolId(e.target.value)}
-              disabled={poolsLoading}
-              className="flex-1 w-full px-4 py-3 rounded-lg border border-gray-300 bg-white text-gray-900 focus:outline-none truncate sm:whitespace-nowrap"
-            >
-              <option value="">-- Choose a pool (or paste an ID below) --</option>
-              {availablePools.map((p) => (
-                <option key={p.poolId} value={p.poolId} title={p.poolId}>
-                  {`${p.tokenXSymbol ?? "X"}/${p.tokenYSymbol ?? "Y"} — ${truncateId(p.poolId)}`}
-                </option>
-              ))}
-            </select>
+            {/* Dropdown to pick a pool (falls back to manual input) */}
+            <div className="flex flex-col gap-2">
+              <div className="flex flex-col sm:flex-row gap-2 items-center w-full">
+                <select
+                  value={availablePools.find((p) => p.poolId === poolId) ? poolId : ""}
+                  onChange={(e) => setPoolId(e.target.value)}
+                  disabled={poolsLoading}
+                  className="flex-1 w-full px-4 py-3 rounded-lg border border-gray-300 bg-white text-gray-900 focus:outline-none truncate sm:whitespace-nowrap"
+                >
+                  <option value="">-- Choose a pool (or paste an ID below) --</option>
+                  {availablePools.map((p) => (
+                    <option key={p.poolId} value={p.poolId} title={p.poolId}>
+                      {`${p.tokenXSymbol ?? "X"}/${p.tokenYSymbol ?? "Y"} — ${truncateId(p.poolId)}`}
+                    </option>
+                  ))}
+                </select>
 
-            <button
-              onClick={fetchPoolInfo}
-              disabled={loading || !poolId}
-              className="w-full sm:w-auto px-6 py-3 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-200 text-white font-medium rounded-lg transition-colors"
-            >
-              {loading ? "..." : "Fetch"}
-            </button>
+                <button
+                  onClick={fetchPoolInfo}
+                  disabled={loading || !poolId}
+                  className="w-full sm:w-auto px-6 py-3 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-200 text-white font-medium rounded-lg transition-colors"
+                >
+                  {loading ? "..." : "Fetch"}
+                </button>
+              </div>
+
+              {/* If a known pool is selected, show a compact readonly badge + copy button. Otherwise show paste input. */}
+              {availablePools.find((p) => p.poolId === poolId) ? (
+                <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 w-full">
+                  <div className="w-full sm:w-auto px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm font-mono text-gray-700 truncate wrap-break-word">
+                    {truncateId(poolId)}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => copyToClipboard(poolId)}
+                    className="w-full sm:w-auto px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm hover:bg-gray-50"
+                  >
+                    Copy
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPoolId("")}
+                    className="w-full sm:w-auto px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm hover:bg-gray-50"
+                  >
+                    Clear
+                  </button>
+                </div>
+              ) : (
+                <input
+                  type="text"
+                  value={poolId}
+                  onChange={(e) => setPoolId(e.target.value)}
+                  placeholder="Or paste pool ID (0x...)"
+                  inputMode="text"
+                  autoComplete="off"
+                  spellCheck={false}
+                  className="w-full px-4 py-3 rounded-lg border border-gray-300 bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-600 break-all"
+                />
+              )}
+            </div>
           </div>
 
-          {/* If a known pool is selected, show a compact readonly badge + copy button. Otherwise show paste input. */}
-          {availablePools.find((p) => p.poolId === poolId) ? (
-            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 w-full">
-              <div className="w-full sm:w-auto px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm font-mono text-gray-700 truncate wrap-break-word">
-                {truncateId(poolId)}
+          {poolData && (
+            // grid: single column on mobile, two columns on small+ screens to save vertical space
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {/* Reserves */}
+              <div className="bg-gray-50 rounded-xl p-4">
+                <h3 className="font-semibold text-gray-900 mb-3 text-sm sm:text-base">Reserves</h3>
+                <div className="space-y-2">
+                  <div className="flex justify-between items-center">
+                    <span className="text-gray-600 text-sm sm:text-base">{tokenXLabel}</span>
+                    <span className="font-mono font-semibold text-gray-900 text-sm sm:text-base truncate max-w-[140px] text-right">
+                      {memoValues.balanceXFormatted}
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-gray-600 text-sm sm:text-base">{tokenYLabel}</span>
+                    <span className="font-mono font-semibold text-gray-900 text-sm sm:text-base truncate max-w-[140px] text-right">
+                      {memoValues.balanceYFormatted}
+                    </span>
+                  </div>
+                </div>
               </div>
-              <button
-                type="button"
-                onClick={() => copyToClipboard(poolId)}
-                className="w-full sm:w-auto px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm hover:bg-gray-50"
-              >
-                Copy
-              </button>
-              <button
-                type="button"
-                onClick={() => setPoolId("")}
-                className="w-full sm:w-auto px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm hover:bg-gray-50"
-              >
-                Clear
-              </button>
+
+              {/* Prices */}
+              <div className="bg-gray-50 rounded-xl p-4">
+                <h3 className="font-semibold text-gray-900 mb-3 text-sm sm:text-base">Prices</h3>
+                <div className="space-y-2">
+                  <div className="flex justify-between items-center">
+                    <span className="text-gray-600 text-sm sm:text-base">1 {tokenYLabel} =</span>
+                    <span className="font-mono font-semibold text-gray-900 text-sm sm:text-base">
+                      {memoValues.kanariPerIota} {tokenXLabel}
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-gray-600 text-sm sm:text-base">1 {tokenXLabel} =</span>
+                    <span className="font-mono font-semibold text-gray-900 text-sm sm:text-base">
+                      {memoValues.iotaPerKanari} {tokenYLabel}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Pool Stats */}
+              <div className="bg-gray-50 rounded-xl p-4">
+                <h3 className="font-semibold text-gray-900 mb-3 text-sm sm:text-base">Pool Stats</h3>
+                <div className="space-y-2">
+                  <div className="flex justify-between items-center">
+                    <span className="text-gray-600 text-sm sm:text-base">LP Supply</span>
+                    <span className="font-mono font-semibold text-gray-900 text-sm sm:text-base truncate max-w-[140px] text-right">
+                      {memoValues.lpSupplyFormatted}
+                    </span>
+                  </div>
+                  {poolUi && (
+                    <>
+                      <div className="flex justify-between items-center">
+                        <span className="text-gray-600 text-sm sm:text-base">Burn Reserve</span>
+                        <span className="font-mono text-xs text-gray-700 truncate max-w-[140px] text-right">
+                          {poolUi.burnAddr ? `${poolUi.burnAddr.slice(0, 8)}...${poolUi.burnAddr.slice(-6)}` : "—"}
+                        </span>
+                      </div>
+                      <div className="flex justify-between items-center">
+                        <span className="text-gray-600 text-sm sm:text-base">Burned LP</span>
+                        <span className="font-mono font-semibold text-gray-900 text-sm sm:text-base">
+                          {poolUi.burnedAmount ? formatAmount(BigInt(poolUi.burnedAmount)) : "0"}
+                        </span>
+                      </div>
+                      <div className="flex justify-between items-center">
+                        <span className="text-gray-600 text-sm sm:text-base">Active LP</span>
+                        <span className="font-mono font-semibold text-gray-900 text-sm sm:text-base">
+                          {poolUi.activeLp ? formatAmount(BigInt(poolUi.activeLp)) : memoValues.lpSupplyFormatted}
+                        </span>
+                      </div>
+                    </>
+                  )}
+                  <div className="flex justify-between items-center">
+                    <span className="text-gray-600 text-sm sm:text-base">Fee</span>
+                    <span className="font-mono font-semibold text-gray-900 text-sm sm:text-base">
+                      {memoValues.feePercent}%
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-gray-600 text-sm sm:text-base">TVL (USD)</span>
+                    <span className="font-mono font-semibold text-gray-900 text-sm sm:text-base">
+                      ${memoValues.tvlUsd}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Share Calculator (if user has LP tokens) */}
+              {currentAccount && (
+                <div className="bg-gray-50 border border-gray-200 rounded-xl p-4 sm:col-span-2">
+                  <h3 className="font-semibold text-gray-900 mb-2 text-sm sm:text-base">Your Position</h3>
+                  <p className="text-sm text-gray-700">Connect your wallet and check your LP tokens to see your pool share.</p>
+                </div>
+              )}
             </div>
-          ) : (
-            <input
-              type="text"
-              value={poolId}
-              onChange={(e) => setPoolId(e.target.value)}
-              placeholder="Or paste pool ID (0x...)"
-              inputMode="text"
-              autoComplete="off"
-              spellCheck={false}
-              className="w-full px-4 py-3 rounded-lg border border-gray-300 bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-600 break-all"
-            />
           )}
-        </div>
+
+          {!poolData && !loading && (
+            <div className="text-center py-12 text-gray-500 text-sm sm:text-base">Enter a pool ID to view information</div>
+          )}
+        </Card>
       </div>
 
-      {poolData && (
-        // grid: single column on mobile, two columns on small+ screens to save vertical space
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          {/* Reserves */}
-          <div className="bg-gray-50 rounded-xl p-4">
-            <h3 className="font-semibold text-gray-900 mb-3 text-sm sm:text-base">Reserves</h3>
-            <div className="space-y-2">
-              <div className="flex justify-between items-center">
-                <span className="text-gray-600 text-sm sm:text-base">{tokenXLabel}</span>
-                <span className="font-mono font-semibold text-gray-900 text-sm sm:text-base truncate max-w-[140px] text-right">
-                  {memoValues.balanceXFormatted}
-                </span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-gray-600 text-sm sm:text-base">{tokenYLabel}</span>
-                <span className="font-mono font-semibold text-gray-900 text-sm sm:text-base truncate max-w-[140px] text-right">
-                  {memoValues.balanceYFormatted}
-                </span>
-              </div>
-            </div>
-          </div>
-
-          {/* Prices */}
-          <div className="bg-gray-50 rounded-xl p-4">
-            <h3 className="font-semibold text-gray-900 mb-3 text-sm sm:text-base">Prices</h3>
-            <div className="space-y-2">
-              <div className="flex justify-between items-center">
-                <span className="text-gray-600 text-sm sm:text-base">1 {tokenYLabel} =</span>
-                <span className="font-mono font-semibold text-gray-900 text-sm sm:text-base">
-                  {memoValues.kanariPerIota} {tokenXLabel}
-                </span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-gray-600 text-sm sm:text-base">1 {tokenXLabel} =</span>
-                <span className="font-mono font-semibold text-gray-900 text-sm sm:text-base">
-                  {memoValues.iotaPerKanari} {tokenYLabel}
-                </span>
-              </div>
-            </div>
-          </div>
-
-          {/* Pool Stats */}
-          <div className="bg-gray-50 rounded-xl p-4">
-            <h3 className="font-semibold text-gray-900 mb-3 text-sm sm:text-base">Pool Stats</h3>
-            <div className="space-y-2">
-              <div className="flex justify-between items-center">
-                <span className="text-gray-600 text-sm sm:text-base">LP Supply</span>
-                <span className="font-mono font-semibold text-gray-900 text-sm sm:text-base truncate max-w-[140px] text-right">
-                  {memoValues.lpSupplyFormatted}
-                </span>
-              </div>
-              {poolUi && (
-                <>
-                  <div className="flex justify-between items-center">
-                    <span className="text-gray-600 text-sm sm:text-base">Burn Reserve</span>
-                    <span className="font-mono text-xs text-gray-700 truncate max-w-[140px] text-right">
-                      {poolUi.burnAddr ? `${poolUi.burnAddr.slice(0, 8)}...${poolUi.burnAddr.slice(-6)}` : "—"}
-                    </span>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-gray-600 text-sm sm:text-base">Burned LP</span>
-                    <span className="font-mono font-semibold text-gray-900 text-sm sm:text-base">
-                      {poolUi.burnedAmount ? formatAmount(BigInt(poolUi.burnedAmount)) : "0"}
-                    </span>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-gray-600 text-sm sm:text-base">Active LP</span>
-                    <span className="font-mono font-semibold text-gray-900 text-sm sm:text-base">
-                      {poolUi.activeLp ? formatAmount(BigInt(poolUi.activeLp)) : memoValues.lpSupplyFormatted}
-                    </span>
-                  </div>
-                </>
-              )}
-              <div className="flex justify-between items-center">
-                <span className="text-gray-600 text-sm sm:text-base">Fee</span>
-                <span className="font-mono font-semibold text-gray-900 text-sm sm:text-base">
-                  {memoValues.feePercent}%
-                </span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-gray-600 text-sm sm:text-base">TVL (USD)</span>
-                <span className="font-mono font-semibold text-gray-900 text-sm sm:text-base">
-                  ${memoValues.tvlUsd}
-                </span>
-              </div>
-            </div>
-          </div>
-
-          <PriceOracleControls
-            poolId={poolId}
-            tokenXTypeFull={tokenXTypeFull}
-            tokenYTypeFull={tokenYTypeFull}
-            client={client}
-            currentAccount={currentAccount}
-            signAndExecute={signAndExecute as unknown as import("./PriceOracleControls").SignAndExecute}
-          />
-
-          {/* Share Calculator (if user has LP tokens) */}
-          {currentAccount && (
-            <div className="bg-gray-50 border border-gray-200 rounded-xl p-4 sm:col-span-2">
-              <h3 className="font-semibold text-gray-900 mb-2 text-sm sm:text-base">Your Position</h3>
-              <p className="text-sm text-gray-700">
-                Connect your wallet and check your LP tokens to see your pool share.
-              </p>
-            </div>
-          )}
-        </div>
-      )}
-
-      {!poolData && !loading && (
-        <div className="text-center py-12 text-gray-500 text-sm sm:text-base">
-          Enter a pool ID to view information
-        </div>
-      )}
-    </Card>
+      {/* Right: Price Oracle controls */}
+      <div className="w-full">
+        <PriceOracleControls
+          poolId={poolId}
+          tokenXTypeFull={tokenXTypeFull}
+          tokenYTypeFull={tokenYTypeFull}
+          client={client}
+          currentAccount={currentAccount}
+          signAndExecute={signAndExecute as unknown as import("./PriceOracleControls").SignAndExecute}
+        />
+      </div>
+    </div>
   );
 }
