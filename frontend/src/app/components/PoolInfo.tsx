@@ -64,6 +64,9 @@ export default function PoolInfo() {
   const [oracleId, setOracleId] = useState("");
   const [oracleMaxObservations, setOracleMaxObservations] = useState<number>(100);
   const [oracleInfo, setOracleInfo] = useState<{ observations?: number } | null>(null);
+  // manual/override token type args (allow user to query pool by types)
+  const [tokenXTypeInput, setTokenXTypeInput] = useState<string>("");
+  const [tokenYTypeInput, setTokenYTypeInput] = useState<string>("");
   // UI helper state for burn/reserved info
   const [poolUi, setPoolUi] = useState<{ burnAddr?: string; burnedAmount?: string; activeLp?: string } | null>(null);
 
@@ -249,6 +252,81 @@ export default function PoolInfo() {
     } catch (error) {
       console.error("Error fetching pool info:", error);
       alert(`Error: ${error}`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Find pool by Move type arguments using the DEXFactory.get_pool_address read-only wrapper
+  const findPoolByTypes = async () => {
+    // prefer explicit input fields, fall back to detected full types
+    const tx = tokenXTypeInput && tokenXTypeInput.trim() !== "" ? tokenXTypeInput.trim() : tokenXTypeFull;
+    const ty = tokenYTypeInput && tokenYTypeInput.trim() !== "" ? tokenYTypeInput.trim() : tokenYTypeFull;
+    if (!tx || !ty) {
+      alert("Provide token type arguments or fetch a pool first to auto-fill types.");
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const cliAny = client as any;
+      let readRes: any = null;
+      const registryId = CONTRACTS.REGISTRY_DEX_ID;
+
+      // Try common SDK read-only helpers (callReadOnly / readMove / devInspect)
+      if (cliAny && typeof cliAny.callReadOnly === "function") {
+        readRes = await cliAny.callReadOnly({
+          package: CONTRACTS.PACKAGE_ID,
+          module: MODULES.DEX_FACTORY,
+          function: DEX_FUNCTIONS.GET_POOL_ADDRESS,
+          arguments: [registryId],
+          typeArguments: [tx, ty],
+        });
+      } else if (cliAny && typeof cliAny.readMove === "function") {
+        readRes = await cliAny.readMove({
+          package: CONTRACTS.PACKAGE_ID,
+          module: MODULES.DEX_FACTORY,
+          function: DEX_FUNCTIONS.GET_POOL_ADDRESS,
+          arguments: [registryId],
+          typeArguments: [tx, ty],
+        });
+      } else if (cliAny && typeof cliAny.devInspect === "function") {
+        // devInspect may return a complex object; attempt to call it as a last resort
+        try {
+          const inspect = await cliAny.devInspect({
+            sender: currentAccount?.address ?? "0x0",
+            package: CONTRACTS.PACKAGE_ID,
+            module: MODULES.DEX_FACTORY,
+            function: DEX_FUNCTIONS.GET_POOL_ADDRESS,
+            arguments: [registryId],
+            typeArguments: [tx, ty],
+          });
+          readRes = inspect;
+        } catch (e) {
+          console.warn("devInspect failed:", e);
+        }
+      }
+
+      // Interpret common shapes of readRes and extract an object id if present
+      const idRegex = /0x[0-9a-fA-F]{64}/g;
+      let foundId: string | null = null;
+      try {
+        const s = JSON.stringify(readRes);
+        const m = s.match(idRegex);
+        if (m && m.length > 0) foundId = m[0];
+      } catch {
+        // ignore
+      }
+
+      if (foundId) {
+        setPoolId(foundId);
+        alert(`Found pool: ${foundId}`);
+      } else {
+        alert("Pool not found for these token types.");
+      }
+    } catch (err) {
+      console.error("Find pool failed:", err);
+      alert(String(err));
     } finally {
       setLoading(false);
     }
@@ -617,6 +695,29 @@ export default function PoolInfo() {
                   className="w-full mt-1 px-3 py-2 rounded-lg border border-gray-200"
                 />
               </div>
+            </div>
+            <div className="flex gap-2 mt-2">
+              <input
+                type="text"
+                value={tokenXTypeInput}
+                onChange={(e) => setTokenXTypeInput(e.target.value)}
+                placeholder="Token X type (optional)"
+                className="flex-1 px-3 py-2 rounded-lg border border-gray-200"
+              />
+              <input
+                type="text"
+                value={tokenYTypeInput}
+                onChange={(e) => setTokenYTypeInput(e.target.value)}
+                placeholder="Token Y type (optional)"
+                className="flex-1 px-3 py-2 rounded-lg border border-gray-200"
+              />
+              <button
+                onClick={findPoolByTypes}
+                disabled={loading}
+                className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700"
+              >
+                Find by types
+              </button>
             </div>
 
             <div className="mt-3 flex gap-2">

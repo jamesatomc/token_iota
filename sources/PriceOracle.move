@@ -10,6 +10,7 @@ use kanari_network::DEX::LiquidityPool;
 const E_INVALID_OBSERVATION: u64 = 1;
 const E_NO_OBSERVATIONS: u64 = 2;
 const E_INSUFFICIENT_LIQUIDITY: u64 = 3;
+const E_POOL_MISMATCH: u64 = 4;
 
 // Price precision (9 decimals for accurate calculations)
 const PRICE_PRECISION: u128 = 1_000_000_000;
@@ -114,6 +115,9 @@ public fun update_oracle<X, Y>(
 ) {
     let current_time = iota::clock::timestamp_ms(clock) / 1000;
     let (reserve_x, reserve_y) = get_pool_reserves(pool);
+         // Ensure the provided pool corresponds to this oracle
+    let actual_pool_id = kanari_network::DEX::get_pool_id(pool);
+    assert!(actual_pool_id == oracle.pool_id, E_POOL_MISMATCH);
 
     // Skip if no liquidity (reserves are u128)
     assert!(reserve_x > 0u128 && reserve_y > 0u128, E_INSUFFICIENT_LIQUIDITY);

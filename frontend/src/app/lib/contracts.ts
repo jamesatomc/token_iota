@@ -122,6 +122,10 @@ export const DEEPBOOK_FUNCTIONS = {
   PLACE_BID: "place_bid",
   PLACE_ASK: "place_ask",
   CANCEL_ORDER: "cancel_order",
+  // Admin functions (registry-based)
+  SET_BOOK_ADMIN: "set_book_admin",
+  WITHDRAW_FEES: "withdraw_fees",
+  GET_BOOK_ADMIN: "get_book_admin",
   
   // Market data
   GET_BEST_BID: "get_best_bid",

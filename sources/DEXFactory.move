@@ -21,6 +21,11 @@ public entry fun create_pool<X, Y>(
     DEX::create_pool<X, Y>(registry, fee_bps, ctx);
 }
 
+/// Helper for frontends: get pool address for a token pair (any order)
+public fun get_pool_address<X, Y>(registry: &GlobalPoolRegistry): Option<address> {
+    DEX::get_pool_address<X, Y>(registry)
+}
+
 /// Add liquidity to an existing pool
 public entry fun add_liquidity<X, Y>(
     pool: &mut LiquidityPool<X, Y>,

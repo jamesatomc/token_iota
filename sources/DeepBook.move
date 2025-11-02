@@ -17,6 +17,7 @@ const E_INVALID_FEE: u64 = 6;
 const E_INVALID_DEPTH: u64 = 7;
 const E_ORDERBOOK_ALREADY_EXISTS: u64 = 8;
 const E_SAME_TOKEN_PAIR: u64 = 9;
+const E_OVERFLOW: u64 = 10;
 
 // depth limits
 const MAX_DEPTH: u64 = 1_000;
@@ -166,7 +167,6 @@ public fun create_global_registry(ctx: &mut tx_context::TxContext): address {
     transfer::share_object(registry);
     registry_id
 }
-
 
 /// Helper function to compare two vectors lexicographically (returns true if v1 <= v2)
 public fun compare_vectors(v1: &vector<u8>, v2: &vector<u8>): bool {
@@ -356,8 +356,8 @@ public entry fun get_or_create_order_book_with_decimals<Base, Quote>(
 
         let book_id = object::uid_to_address(&book.id);
         table::add(&mut registry.books, pair_hash, book_id);
-    // set creator as admin
-    table::add(&mut registry.admins, book_id, tx_context::sender(ctx));
+        // set creator as admin
+        table::add(&mut registry.admins, book_id, tx_context::sender(ctx));
         event::emit(OrderBookCreated { book_id });
         transfer::share_object(book);
         book_id
@@ -384,7 +384,11 @@ public entry fun place_bid<Base, Quote>(
     // required_quote = (quantity * price * 10^{quote_decimals}) / (PRICE_SCALE * 10^{base_decimals})
     let scale_num = pow10_u128(book.quote_decimals);
     let scale_den = pow10_u128(book.base_decimals);
-    let required_quote_u128 = ((quantity as u128) * (price as u128) * scale_num) / (PRICE_SCALE * scale_den);
+    let required_quote_u128 =
+        ((quantity as u128) * (price as u128) * scale_num) / (PRICE_SCALE * scale_den);
+    // Prevent orders that would round the required quote to zero (ineffective)
+    // or that require more than u64 max (can't represent in balances).
+    assert!(required_quote_u128 > 0, E_INSUFFICIENT_LIQUIDITY);
     assert!(required_quote_u128 <= U64_MAX, E_INSUFFICIENT_LIQUIDITY);
     let required_quote = required_quote_u128 as u64;
     let payment_value = coin::value(&payment);
@@ -424,7 +428,11 @@ public entry fun place_bid<Base, Quote>(
             let price_u128 = (match_price as u128);
             // trade_value = matched * price / PRICE_SCALE adjusted for decimals
             // = (matched * price * 10^{quote_decimals}) / (PRICE_SCALE * 10^{base_decimals})
-            let trade_value_u128 = (matched_u128 * price_u128 * pow10_u128(book.quote_decimals)) / (PRICE_SCALE * pow10_u128(book.base_decimals));
+            let trade_value_u128 =
+                (matched_u128 * price_u128 * pow10_u128(book.quote_decimals)) / (PRICE_SCALE * pow10_u128(book.base_decimals));
+
+            // ensure trade produces a non-zero quote amount (avoid silent rounding to zero)
+            assert!(trade_value_u128 > 0, E_INSUFFICIENT_LIQUIDITY);
 
             // bounds check before casting
             assert!(trade_value_u128 <= U64_MAX, E_INSUFFICIENT_LIQUIDITY);
@@ -502,8 +510,11 @@ public entry fun place_bid<Base, Quote>(
             let worst = vector::pop_back(&mut book.bids);
             let unmatched = worst.quantity - worst.filled;
             if (unmatched > 0) {
-                let refund_quote_u128 = ((unmatched as u128) * (worst.price as u128) * pow10_u128(book.quote_decimals)) / (PRICE_SCALE * pow10_u128(book.base_decimals));
-                let refund_quote = if (refund_quote_u128 <= U64_MAX) { refund_quote_u128 as u64 } else { 0u64 };
+                let refund_quote_u128 =
+                    ((unmatched as u128) * (worst.price as u128) * pow10_u128(book.quote_decimals)) / (PRICE_SCALE * pow10_u128(book.base_decimals));
+                // prevent silent loss due to overflow — abort instead
+                assert!(refund_quote_u128 <= U64_MAX, E_OVERFLOW);
+                let refund_quote = refund_quote_u128 as u64;
                 if (refund_quote > 0) {
                     let refund = balance::split(&mut book.quote_balance, refund_quote);
                     transfer::public_transfer(
@@ -519,7 +530,9 @@ public entry fun place_bid<Base, Quote>(
         let mut j = 0;
         while (j < len) {
             let bid = vector::borrow(&book.bids, j);
-            if (price > bid.price) {
+            // insert before strictly lower-priced bids; for equal price keep FIFO by not inserting before
+            // explicit tie-breaker by order_id is present for clarity (new orders have larger ids so won't preempt older ones)
+            if (price > bid.price || (price == bid.price && order_id < bid.id)) {
                 insert_pos = j;
                 break
             };
@@ -562,6 +575,16 @@ public entry fun place_ask<Base, Quote>(
 
     let maker = tx_context::sender(ctx);
 
+    // Defensive pre-check: compute the quote value that would correspond to the
+    // full quantity at the provided price. Reject orders that would round to
+    // zero or whose computed quote would exceed u64 bounds. This avoids
+    // allowing orders that will never match or that would later trigger
+    // overflow/unsafe casts during refunds or matching.
+    let potential_quote_u128 =
+        ((quantity as u128) * (price as u128) * pow10_u128(book.quote_decimals)) / (PRICE_SCALE * pow10_u128(book.base_decimals));
+    assert!(potential_quote_u128 > 0, E_INSUFFICIENT_LIQUIDITY);
+    assert!(potential_quote_u128 <= U64_MAX, E_OVERFLOW);
+
     // Split exact amount needed, return excess
     let locked_base = if (coin_value > quantity) {
         let excess = coin::split(&mut base_coin, coin_value - quantity, ctx);
@@ -594,7 +617,11 @@ public entry fun place_ask<Base, Quote>(
             let matched_u128 = (matched as u128);
             let price_u128 = (match_price as u128);
             // trade_value = matched * price / PRICE_SCALE adjusted for decimals
-            let trade_value_u128 = (matched_u128 * price_u128 * pow10_u128(book.quote_decimals)) / (PRICE_SCALE * pow10_u128(book.base_decimals));
+            let trade_value_u128 =
+                (matched_u128 * price_u128 * pow10_u128(book.quote_decimals)) / (PRICE_SCALE * pow10_u128(book.base_decimals));
+
+            // ensure trade produces a non-zero quote amount (avoid silent rounding to zero)
+            assert!(trade_value_u128 > 0, E_INSUFFICIENT_LIQUIDITY);
 
             // bounds check before casting
             assert!(trade_value_u128 <= U64_MAX, E_INSUFFICIENT_LIQUIDITY);
@@ -684,7 +711,8 @@ public entry fun place_ask<Base, Quote>(
         let mut j = 0;
         while (j < len) {
             let ask = vector::borrow(&book.asks, j);
-            if (price < ask.price) {
+            // insert before strictly higher-priced asks; for equal price keep FIFO by not inserting before
+            if (price < ask.price || (price == ask.price && order_id < ask.id)) {
                 insert_pos = j;
                 break
             };
@@ -726,8 +754,11 @@ public entry fun cancel_order<Base, Quote>(
 
             // Calculate unmatched amount to refund
             let unmatched_quantity = bid.quantity - bid.filled;
-            let unmatched_quote_u128 = ((unmatched_quantity as u128) * (bid.price as u128) * pow10_u128(book.quote_decimals)) / (PRICE_SCALE * pow10_u128(book.base_decimals));
-            let unmatched_quote = if (unmatched_quote_u128 <= U64_MAX) { unmatched_quote_u128 as u64 } else { 0u64 };
+            let unmatched_quote_u128 =
+                ((unmatched_quantity as u128) * (bid.price as u128) * pow10_u128(book.quote_decimals)) / (PRICE_SCALE * pow10_u128(book.base_decimals));
+            // prevent silent-zero refunds on overflow
+            assert!(unmatched_quote_u128 <= U64_MAX, E_OVERFLOW);
+            let unmatched_quote = unmatched_quote_u128 as u64;
 
             // Remove order first
             vector::remove(&mut book.bids, i);
@@ -854,6 +885,16 @@ public fun get_book_depth<Base, Quote>(book: &OrderBook<Base, Quote>): (u64, u64
     (total_bid_quantity, total_ask_quantity)
 }
 
+/// Get current fee balances (base, quote) for a book — useful for testing and monitoring
+public fun get_fee_balances<Base, Quote>(book: &OrderBook<Base, Quote>): (u64, u64) {
+    (balance::value(&book.fee_balance_base), balance::value(&book.fee_balance_quote))
+}
+
+/// Get current locked balances (base, quote) in the order book
+public fun get_locked_balances<Base, Quote>(book: &OrderBook<Base, Quote>): (u64, u64) {
+    (balance::value(&book.base_balance), balance::value(&book.quote_balance))
+}
+
 /// Calculate quote amount for given base amount at price
 public fun calculate_quote_amount(base_amount: u64, price: u64): u64 {
     ((base_amount as u128) * (price as u128) / PRICE_SCALE) as u64
@@ -871,7 +912,8 @@ public fun calculate_quote_amount_with_decimals(
     base_decimals: u8,
     quote_decimals: u8,
 ): u64 {
-    let res_u128 = ((base_amount as u128) * (price as u128) * pow10_u128(quote_decimals)) / (PRICE_SCALE * pow10_u128(base_decimals));
+    let res_u128 =
+        ((base_amount as u128) * (price as u128) * pow10_u128(quote_decimals)) / (PRICE_SCALE * pow10_u128(base_decimals));
     assert!(res_u128 <= U64_MAX, E_INSUFFICIENT_LIQUIDITY);
     res_u128 as u64
 }
@@ -883,9 +925,39 @@ public fun calculate_base_amount_with_decimals(
     base_decimals: u8,
     quote_decimals: u8,
 ): u64 {
-    let res_u128 = ((quote_amount as u128) * (PRICE_SCALE) * pow10_u128(base_decimals)) / ((price as u128) * pow10_u128(quote_decimals));
+    let res_u128 =
+        ((quote_amount as u128) * (PRICE_SCALE) * pow10_u128(base_decimals)) / ((price as u128) * pow10_u128(quote_decimals));
     assert!(res_u128 <= U64_MAX, E_INVALID_PRICE);
     res_u128 as u64
+}
+
+// Test helpers: expose checked arithmetic used in matching/refunds so tests can
+// assert that the module-level prechecks and overflow guards behave as
+// expected without needing to craft shared objects or Coins in the harness.
+// These are public so test modules can call them.
+public fun validate_quote_capacity(
+    price: u64,
+    quantity: u64,
+    base_decimals: u8,
+    quote_decimals: u8,
+) {
+    let required_quote_u128 =
+        ((quantity as u128) * (price as u128) * pow10_u128(quote_decimals)) / (PRICE_SCALE * pow10_u128(base_decimals));
+    // same checks as place_bid precheck
+    assert!(required_quote_u128 > 0, E_INSUFFICIENT_LIQUIDITY);
+    assert!(required_quote_u128 <= U64_MAX, E_INSUFFICIENT_LIQUIDITY);
+}
+
+public fun check_refund_overflow(
+    unmatched: u128,
+    price: u128,
+    base_decimals: u8,
+    quote_decimals: u8,
+) {
+    let refund_quote_u128 =
+        (unmatched * price * pow10_u128(quote_decimals)) / (PRICE_SCALE * pow10_u128(base_decimals));
+    // same assertion used in eviction/cancel refund logic
+    assert!(refund_quote_u128 <= U64_MAX, E_OVERFLOW);
 }
 
 /// Get all bids in the order book

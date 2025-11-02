@@ -36,6 +36,7 @@ const E_INVALID_POOL_STATE: u64 = 6;
 const E_MIN_LIQUIDITY: u64 = 7;
 const E_OVERFLOW: u64 = 8;
 const E_POOL_ALREADY_EXISTS: u64 = 9;
+const E_SAME_TOKEN_PAIR: u64 = 10;
 
 // Fee constants (basis points). We use BPS_DENOMINATOR to make the denominator explicit.
 const FEE_LOW: u64 = 10; // 0.1%
@@ -151,6 +152,9 @@ public fun create_pool<X, Y>(
     // Compute deterministic hash for this type pair (sorted to prevent duplicates)
     let ty_x = type_name::get_with_original_ids<X>().into_string().into_bytes();
     let ty_y = type_name::get_with_original_ids<Y>().into_string().into_bytes();
+
+    // Prevent creating pool with same token types
+    assert!(ty_x != ty_y, E_SAME_TOKEN_PAIR);
     
     // Sort type names to ensure IOTA/KANARI and KANARI/IOTA get same hash
     let (first, second) = if (compare_vectors(&ty_x, &ty_y)) {

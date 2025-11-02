@@ -851,6 +851,8 @@ export default function DeepBookInterface() {
             alert("❌ Invalid price!\n\nPrice must be greater than 0.");
           } else if (errStr.includes("E_INVALID_QUANTITY")) {
             alert("❌ Invalid quantity!\n\nQuantity must be greater than 0.");
+          } else if (errStr.includes("E_OVERFLOW")) {
+            alert("❌ Numeric overflow detected (order values too large).\n\nReduce price or quantity and try again.");
           } else if (errStr.includes("not found") || errStr.includes("does not exist")) {
             alert("❌ Order book not found!\n\nThe specified OrderBook object ID does not exist or is invalid.\n\nPlease verify the book ID.");
           } else if (errStr.includes("Insufficient")) {
