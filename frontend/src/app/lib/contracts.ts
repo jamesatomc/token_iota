@@ -89,67 +89,90 @@ export const DEX_FUNCTIONS = {
   GET_RESERVES_U128: "get_reserves_u128",
   POOL_EXISTS: "pool_exists",
   GET_POOL_ADDRESS: "get_pool_address",
-  // Oracle-related (PriceOracle module exposes these via DEXFactory entry wrappers)
-  CREATE_ORACLE: "create_oracle",
-  UPDATE_ORACLE: "update_oracle",
-  GET_TWAP: "get_twap_price",
 };
 
 // PriceOracle helper names
 export const ORACLE_FUNCTIONS = {
   CREATE_ORACLE: "create_oracle",
+  CREATE_AND_SHARE_ORACLE: "create_and_share_oracle",
   UPDATE_ORACLE: "update_oracle",
   GET_TWAP: "get_twap_price",
   GET_TWAP_AT_TIME: "get_twap_price_at_time",
+  GET_SPOT_PRICE: "get_spot_price",
+  FIND_OBSERVATION_INDEX: "find_observation_index",
+  GET_POOL_RESERVES: "get_pool_reserves",
   GET_OBSERVATION_COUNT: "get_observation_count",
+  GET_OLDEST_OBSERVATION_TIME: "get_oldest_observation_time",
+  GET_LATEST_OBSERVATION_TIME: "get_latest_observation_time",
+  GET_POOL_ID: "get_pool_id",
+  GET_MAX_OBSERVATIONS: "get_max_observations",
+  GET_LAST_PRICE_CUMULATIVE: "get_last_price_cumulative",
+  GET_OBSERVATION_AT_INDEX: "get_observation_at_index",
 };
 
 // Function names for DeepBook
 export const DEEPBOOK_FUNCTIONS = {
-  // Registry management
-  CREATE_GLOBAL_REGISTRY: "create_global_registry",
+  // // Registry creation
+  // CREATE_GLOBAL_REGISTRY: "create_global_registry",
   
   // Order book creation (with explicit decimals - REQUIRED)
   CREATE_ORDER_BOOK_WITH_DECIMALS: "create_order_book_with_decimals",
   CREATE_ORDER_BOOK_WITH_REGISTRY_WITH_DECIMALS: "create_order_book_with_registry_with_decimals",
   GET_OR_CREATE_WITH_DECIMALS: "get_or_create_order_book_with_decimals",
   
-  // Order book queries
-  BOOK_EXISTS: "book_exists",
-  GET_BOOK_ADDRESS: "get_book_address",
-  
-  // Order placement
+  // Order placement and management
   PLACE_BID: "place_bid",
   PLACE_ASK: "place_ask",
   CANCEL_ORDER: "cancel_order",
+  
+  // Registry queries
+  BOOK_EXISTS: "book_exists",
+  GET_BOOK_ADDRESS: "get_book_address",
+  
+  // Order book view functions
+  // GET_BEST_BID: "get_best_bid",
+  // GET_BEST_ASK: "get_best_ask",
+  // GET_SPREAD: "get_spread",
+  // GET_BID_COUNT: "get_bid_count",
+  // GET_ASK_COUNT: "get_ask_count",
+  // GET_MAX_DEPTH: "get_max_depth",
+  // GET_BOOK_DEPTH: "get_book_depth",
+  // GET_FEE_BALANCES: "get_fee_balances",
+  // GET_LOCKED_BALANCES: "get_locked_balances",
+  // GET_ALL_BIDS: "get_all_bids",
+  // GET_ALL_ASKS: "get_all_asks",
+  // GET_BID_AT: "get_bid_at",
+  // GET_ASK_AT: "get_ask_at",
+  // GET_BID_LOCKED_AMOUNT_AT: "get_bid_locked_amount_at",
+  // GET_ASK_LOCKED_AMOUNT_AT: "get_ask_locked_amount_at",
+  // GET_BID_ID_AT: "get_bid_id_at",
+  // GET_ASK_ID_AT: "get_ask_id_at",
+  
+  // // Calculation helpers
+  // CALCULATE_QUOTE_AMOUNT: "calculate_quote_amount",
+  // CALCULATE_BASE_AMOUNT: "calculate_base_amount",
+  // CALCULATE_QUOTE_AMOUNT_WITH_DECIMALS: "calculate_quote_amount_with_decimals",
+  // CALCULATE_BASE_AMOUNT_WITH_DECIMALS: "calculate_base_amount_with_decimals",
+  
+  // // Test helpers
+  // VALIDATE_QUOTE_CAPACITY: "validate_quote_capacity",
+  // CHECK_REFUND_OVERFLOW: "check_refund_overflow",
+  
   // Admin functions (registry-based)
+  GET_BOOK_ADMIN: "get_book_admin",
   SET_BOOK_ADMIN: "set_book_admin",
   WITHDRAW_FEES: "withdraw_fees",
-  GET_BOOK_ADMIN: "get_book_admin",
   
-  // Market data
-  GET_BEST_BID: "get_best_bid",
-  GET_BEST_ASK: "get_best_ask",
-  GET_MAX_DEPTH: "get_max_depth",
-  GET_BOOK_DEPTH: "get_book_depth",
-  GET_SPREAD: "get_spread",
-  GET_ALL_BIDS: "get_all_bids",
-  GET_ALL_ASKS: "get_all_asks",
-  GET_BID_COUNT: "get_bid_count",
-  GET_ASK_COUNT: "get_ask_count",
-  GET_BID_AT: "get_bid_at",
-  GET_ASK_AT: "get_ask_at",
-  
-  // Calculations
-  CALCULATE_QUOTE_AMOUNT: "calculate_quote_amount",
-  CALCULATE_BASE_AMOUNT: "calculate_base_amount",
+  // // Helper functions
+  // COMPARE_VECTORS: "compare_vectors",
+  // POW10_U128: "pow10_u128",
 };
 
 // DeepBook constants
 export const DEEPBOOK = {
   PRICE_SCALE: 1_000_000_000, // 9 decimals for price normalization
-  DEFAULT_FEE_BPS: 30, // 0.3% default fee
-  
+  DEFAULT_FEE_BPS: 10, // 0.1% default fee
+  MAX_DEPTH: 1000, // Maximum order book depth
   // IMPORTANT: All order book creation functions now REQUIRE explicit decimals!
   // Use token-specific decimals (e.g., KANARI=9, USDC=6, IOTA=9)
   // NO default decimals - prevents mismatched decimal bugs

@@ -12,8 +12,9 @@ import QuickTrade from "./QuickTrade";
 import PriceChart from "./PriceChart";
 
 export default function DeepBookInterface() {
-  const [feeBps] = useState(10);
-  const [maxDepth] = useState(1000);
+  // Use centralized default fee from contracts.ts (DEEPBOOK.DEFAULT_FEE_BPS)
+  const [feeBps] = useState(DEEPBOOK.DEFAULT_FEE_BPS);
+  const [maxDepth] = useState(DEEPBOOK.MAX_DEPTH);
   const [loadingCreate, setLoadingCreate] = useState(false);
 
   const [bookId, setBookId] = useState("");

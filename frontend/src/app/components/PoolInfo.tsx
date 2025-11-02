@@ -5,6 +5,7 @@ import { usePools } from "../hooks/usePools";
 import { useCurrentAccount, useIotaClient, useSignAndExecuteTransaction } from "@iota/dapp-kit";
 import { formatAmount as rawFormatAmount, CONTRACTS, MODULES, DEX_FUNCTIONS, computeActiveLpSupply } from "../lib/contracts";
 import Card from "./UI/Card";
+import PriceOracleControls from "./PriceOracleControls";
 
 // small helper type for SDKs that expose read-only helpers
 type ReadOnlyClient = {
@@ -67,13 +68,9 @@ export default function PoolInfo() {
   // new: labels for tokens (defaults kept for backward compatibility)
   const [tokenXLabel, setTokenXLabel] = useState("KANARI");
   const [tokenYLabel, setTokenYLabel] = useState("IOTA");
-  // Oracle UI state
-  const [oracleId, setOracleId] = useState("");
-  const [oracleMaxObservations, setOracleMaxObservations] = useState<number>(100);
-  const [oracleInfo, setOracleInfo] = useState<{ observations?: number } | null>(null);
+  // Oracle UI state is handled by `PriceOracleControls` component
   // manual/override token type args (allow user to query pool by types)
-  const [tokenXTypeInput, setTokenXTypeInput] = useState<string>("");
-  const [tokenYTypeInput, setTokenYTypeInput] = useState<string>("");
+  // (removed unused inputs — token types are detected from the pool object)
   // UI helper state for burn/reserved info
   const [poolUi, setPoolUi] = useState<{ burnAddr?: string; burnedAmount?: string; activeLp?: string } | null>(null);
 
@@ -265,80 +262,8 @@ export default function PoolInfo() {
     }
   };
 
-  // Find pool by Move type arguments using the DEXFactory.get_pool_address read-only wrapper
-  const findPoolByTypes = async () => {
-    // prefer explicit input fields, fall back to detected full types
-    const tx = tokenXTypeInput && tokenXTypeInput.trim() !== "" ? tokenXTypeInput.trim() : tokenXTypeFull;
-    const ty = tokenYTypeInput && tokenYTypeInput.trim() !== "" ? tokenYTypeInput.trim() : tokenYTypeFull;
-    if (!tx || !ty) {
-      alert("Provide token type arguments or fetch a pool first to auto-fill types.");
-      return;
-    }
-
-    setLoading(true);
-    try {
-      const cli = client as unknown as ReadOnlyClient;
-      let readRes: unknown = null;
-      const registryId = CONTRACTS.REGISTRY_DEX_ID;
-
-      // Try common SDK read-only helpers (callReadOnly / readMove / devInspect)
-      if (cli && typeof cli.callReadOnly === "function") {
-        readRes = await cli.callReadOnly({
-          package: CONTRACTS.PACKAGE_ID,
-          module: MODULES.DEX_FACTORY,
-          function: DEX_FUNCTIONS.GET_POOL_ADDRESS,
-          arguments: [registryId],
-          typeArguments: [tx, ty],
-        });
-      } else if (cli && typeof cli.readMove === "function") {
-        readRes = await cli.readMove({
-          package: CONTRACTS.PACKAGE_ID,
-          module: MODULES.DEX_FACTORY,
-          function: DEX_FUNCTIONS.GET_POOL_ADDRESS,
-          arguments: [registryId],
-          typeArguments: [tx, ty],
-        });
-      } else if (cli && typeof cli.devInspect === "function") {
-        // devInspect may return a complex object; attempt to call it as a last resort
-        try {
-          const inspect = await cli.devInspect({
-            sender: currentAccount?.address ?? "0x0",
-            package: CONTRACTS.PACKAGE_ID,
-            module: MODULES.DEX_FACTORY,
-            function: DEX_FUNCTIONS.GET_POOL_ADDRESS,
-            arguments: [registryId],
-            typeArguments: [tx, ty],
-          });
-          readRes = inspect;
-        } catch (e) {
-          console.warn("devInspect failed:", e);
-        }
-      }
-
-      // Interpret common shapes of readRes and extract an object id if present
-      const idRegex = /0x[0-9a-fA-F]{64}/g;
-      let foundId: string | null = null;
-      try {
-        const s = JSON.stringify(readRes);
-        const m = s.match(idRegex);
-        if (m && m.length > 0) foundId = m[0];
-      } catch {
-        // ignore
-      }
-
-      if (foundId) {
-        setPoolId(foundId);
-        alert(`Found pool: ${foundId}`);
-      } else {
-        alert("Pool not found for these token types.");
-      }
-    } catch (err) {
-      console.error("Find pool failed:", err);
-      alert(String(err));
-    } finally {
-      setLoading(false);
-    }
-  };
+  // (removed unused _findPoolByTypes helper) If you want this functionality later,
+  // we can restore a dedicated helper or move it into a small utility module.
 
   // useMemo to avoid recalculating on each render
   const memoValues = useMemo(() => {
@@ -386,126 +311,7 @@ export default function PoolInfo() {
     };
   }, [poolData]);
 
-  // Create oracle transaction
-  const handleCreateOracle = async () => {
-    if (!currentAccount) {
-      alert("Please connect your wallet");
-      return;
-    }
-    if (!poolId) {
-      alert("Please fetch a pool and provide a pool ID first");
-      return;
-    }
-    if (!tokenXTypeFull || !tokenYTypeFull) {
-      alert("Unable to determine pool token types. Fetch pool info first.");
-      return;
-    }
 
-    setLoading(true);
-    try {
-      const tx = new (await import("@iota/iota-sdk/transactions")).Transaction();
-
-      tx.moveCall({
-        target: `${CONTRACTS.PACKAGE_ID}::${MODULES.DEX_FACTORY}::${DEX_FUNCTIONS.CREATE_ORACLE}`,
-        arguments: [
-          tx.object(poolId),
-          tx.pure.u64(oracleMaxObservations),
-          tx.object("0x6"), // system clock object
-        ],
-        typeArguments: [tokenXTypeFull, tokenYTypeFull],
-      });
-
-      signAndExecute(
-        { transaction: tx },
-        {
-          onSuccess: (res) => {
-            alert(`Create oracle submitted. Digest: ${res.digest}`);
-          },
-          onError: (err) => {
-            console.error("Create oracle failed:", err);
-            alert(`Create oracle failed: ${err?.message ?? String(err)}`);
-          },
-        }
-      );
-    } catch (e) {
-      console.error(e);
-      alert(String(e));
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // Update oracle transaction (requires oracle object id)
-  const handleUpdateOracle = async () => {
-    if (!currentAccount) {
-      alert("Please connect your wallet");
-      return;
-    }
-    if (!poolId || !oracleId) {
-      alert("Please provide both pool ID and oracle ID");
-      return;
-    }
-    if (!tokenXTypeFull || !tokenYTypeFull) {
-      alert("Unable to determine pool token types. Fetch pool info first.");
-      return;
-    }
-
-    setLoading(true);
-    try {
-      const tx = new (await import("@iota/iota-sdk/transactions")).Transaction();
-
-      tx.moveCall({
-        target: `${CONTRACTS.PACKAGE_ID}::${MODULES.DEX_FACTORY}::${DEX_FUNCTIONS.UPDATE_ORACLE}`,
-        arguments: [
-          tx.object(oracleId),
-          tx.object(poolId),
-          tx.object("0x6"),
-        ],
-        typeArguments: [tokenXTypeFull, tokenYTypeFull],
-      });
-
-      signAndExecute({ transaction: tx }, {
-        onSuccess: (res) => alert(`Update oracle submitted. Digest: ${res.digest}`),
-        onError: (err) => {
-          console.error("Update oracle failed:", err);
-          alert(`Update oracle failed: ${err?.message ?? String(err)}`);
-        },
-      });
-    } catch (e) {
-      console.error(e);
-      alert(String(e));
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // Fetch basic oracle info (observations count) via getObject
-  const fetchOracleInfo = async () => {
-    if (!oracleId) {
-      alert("Please enter an oracle ID");
-      return;
-    }
-    try {
-      const obj = await client.getObject({ id: oracleId, options: { showContent: true } });
-      if (obj.data?.content?.dataType === "moveObject") {
-        const fields = obj.data.content.fields as unknown as Record<string, unknown>;
-        const obs = fields?.observations as unknown;
-        if (Array.isArray(obs)) {
-          setOracleInfo({ observations: obs.length });
-        } else if (typeof fields?.observations === "string") {
-          // some backends may represent vectors differently; best-effort
-          setOracleInfo({ observations: undefined });
-        } else {
-          setOracleInfo({ observations: undefined });
-        }
-      } else {
-        alert("Invalid oracle object");
-      }
-    } catch (err) {
-      console.error(err);
-      alert(String(err));
-    }
-  };
 
   return (
     // container: responsive padding, max width and centered
@@ -669,87 +475,14 @@ export default function PoolInfo() {
             </div>
           </div>
 
-          {/* Oracle Controls */}
-          <div className="bg-white border border-gray-200 rounded-xl p-4 sm:col-span-2">
-            <h3 className="font-semibold text-gray-900 mb-3 text-sm sm:text-base">Price Oracle</h3>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 items-end">
-              <div className="sm:col-span-1">
-                <label className="text-xs text-gray-600">Max observations</label>
-                <input
-                  type="number"
-                  value={oracleMaxObservations}
-                  onChange={(e) => setOracleMaxObservations(Math.max(1, Number(e.target.value || 1)))}
-                  className="w-full mt-1 px-3 py-2 rounded-lg border border-gray-200"
-                />
-              </div>
-
-              <div className="sm:col-span-1">
-                <button
-                  onClick={handleCreateOracle}
-                  disabled={loading || !tokenXTypeFull || !tokenYTypeFull}
-                  className="w-full px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-200"
-                >
-                  Create Oracle
-                </button>
-              </div>
-
-              <div className="sm:col-span-1">
-                <label className="text-xs text-gray-600">Oracle ID</label>
-                <input
-                  type="text"
-                  value={oracleId}
-                  onChange={(e) => setOracleId(e.target.value)}
-                  placeholder="0x..."
-                  className="w-full mt-1 px-3 py-2 rounded-lg border border-gray-200"
-                />
-              </div>
-            </div>
-            <div className="flex gap-2 mt-2">
-              <input
-                type="text"
-                value={tokenXTypeInput}
-                onChange={(e) => setTokenXTypeInput(e.target.value)}
-                placeholder="Token X type (optional)"
-                className="flex-1 px-3 py-2 rounded-lg border border-gray-200"
-              />
-              <input
-                type="text"
-                value={tokenYTypeInput}
-                onChange={(e) => setTokenYTypeInput(e.target.value)}
-                placeholder="Token Y type (optional)"
-                className="flex-1 px-3 py-2 rounded-lg border border-gray-200"
-              />
-              <button
-                onClick={findPoolByTypes}
-                disabled={loading}
-                className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700"
-              >
-                Find by types
-              </button>
-            </div>
-
-            <div className="mt-3 flex gap-2">
-              <button
-                onClick={handleUpdateOracle}
-                disabled={loading || !oracleId}
-                className="px-3 py-2 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700 disabled:bg-gray-200"
-              >
-                Update Oracle
-              </button>
-
-              <button
-                onClick={fetchOracleInfo}
-                disabled={!oracleId}
-                className="px-3 py-2 border border-gray-200 rounded-lg hover:bg-gray-50"
-              >
-                Fetch Oracle Info
-              </button>
-
-              {oracleInfo && (
-                <div className="ml-auto text-sm text-gray-700">Observations: {oracleInfo.observations ?? "?"}</div>
-              )}
-            </div>
-          </div>
+          <PriceOracleControls
+            poolId={poolId}
+            tokenXTypeFull={tokenXTypeFull}
+            tokenYTypeFull={tokenYTypeFull}
+            client={client}
+            currentAccount={currentAccount}
+            signAndExecute={signAndExecute as unknown as import("./PriceOracleControls").SignAndExecute}
+          />
 
           {/* Share Calculator (if user has LP tokens) */}
           {currentAccount && (
