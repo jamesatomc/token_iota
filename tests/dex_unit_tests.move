@@ -50,10 +50,10 @@ fun test_compare_vectors_various() {
 fun test_calculate_swap_output_large_values() {
     // Test with large values to ensure u128 handling works
     let out = DEX::calculate_swap_output(
-        1_000_000_000u64,  // 1B input
+        1_000_000_000u64, // 1B input
         10_000_000_000u64, // 10B reserve_in
-        5_000_000_000u64,  // 5B reserve_out
-        30u64              // 0.3% fee (30 bps)
+        5_000_000_000u64, // 5B reserve_out
+        30u64, // 0.3% fee (30 bps)
     );
     // Verify it doesn't panic and returns a positive value
     assert!(out > 0u64, 6);

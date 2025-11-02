@@ -3,11 +3,30 @@ module kanari_network::DEX;
 use iota::balance::{Self, Balance};
 use iota::coin::{Self, Coin};
 use iota::event;
+use iota::hash;
 use iota::table::{Self, Table};
 use std::type_name;
-use iota::hash;
 
 // Error codes
+// These error codes are used throughout the module. See usages below for context:
+// 1 (E_INSUFFICIENT_LIQUIDITY): returned when a swap or withdrawal would result in zero/insufficient output
+//    - Used in: `calculate_swap_output`, `swap_x_to_y`, `swap_y_to_x`, `remove_liquidity` checks
+// 2 (E_INVALID_FEE): returned when create_pool receives an unsupported fee value
+//    - Used in: `create_pool` (fee validation)
+// 3 (E_ZERO_AMOUNT): returned when an input coin/amount is zero
+//    - Used in: `add_liquidity`, `swap_x_to_y`, `swap_y_to_x`
+// 4 (E_INSUFFICIENT_LP_TOKENS): returned when attempting to burn more LP than owned
+//    - Used in: `remove_liquidity` (LP amount validations)
+// 5 (E_SLIPPAGE_EXCEEDED): returned when required output or LP minting falls below user-specified minimums
+//    - Used in: `add_liquidity`, `remove_liquidity`, swap functions (min amount out checks)
+// 6 (E_INVALID_POOL_STATE): defensive check for unexpected pool state (e.g., non-zero reserves on initial mint)
+//    - Used in: `add_liquidity` initial liquidity path
+// 7 (E_MIN_LIQUIDITY): returned when initial liquidity does not exceed `MINIMUM_LIQUIDITY`
+//    - Used in: `add_liquidity` initial LP calculation
+// 8 (E_OVERFLOW): returned when intermediate u128 calculations exceed allowed u64 limits
+//    - Used in: safe math helpers (`safe_mul`, `sqrt_u128`) and other arithmetic checks
+// 9 (E_POOL_ALREADY_EXISTS): returned when trying to create a pool for a token pair that already exists
+//    - Used in: `create_pool` registry check
 const E_INSUFFICIENT_LIQUIDITY: u64 = 1;
 const E_INVALID_FEE: u64 = 2;
 const E_ZERO_AMOUNT: u64 = 3;
@@ -17,18 +36,22 @@ const E_INVALID_POOL_STATE: u64 = 6;
 const E_MIN_LIQUIDITY: u64 = 7;
 const E_OVERFLOW: u64 = 8;
 const E_POOL_ALREADY_EXISTS: u64 = 9;
+const E_SAME_TOKEN_PAIR: u64 = 10;
 
-// Fee constants (basis points)
+// Fee constants (basis points). We use BPS_DENOMINATOR to make the denominator explicit.
 const FEE_LOW: u64 = 10; // 0.1%
 const FEE_MED: u64 = 50; // 0.5%
 const FEE_HIGH: u64 = 100; // 1.0%
-const BASIS_POINTS: u64 = 10000;
+// BPS_DENOMINATOR defines the basis points denominator (10000 == 100.00%)
+const BPS_DENOMINATOR: u64 = 10000;
 
 // Minimum liquidity locked forever (prevent division by zero attacks)
 const MINIMUM_LIQUIDITY: u64 = 10;
 
 // Maximum value for u64 (used in overflow checks)
 const U64_MAX: u128 = 18446744073709551615u128;
+// Maximum value for u128 (used to pre-check multiplications that would overflow u128)
+const U128_MAX: u128 = 340282366920938463463374607431768211455u128;
 
 /// LP Token receipt - proves liquidity ownership
 public struct LPToken<phantom X, phantom Y> has key, store {
@@ -65,10 +88,15 @@ public struct PoolCreated has copy, drop {
     type_y: vector<u8>,
 }
 
-/// Burn reserve object created on initial liquidity to hold MINIMUM_LIQUIDITY
-/// as an on-chain, inspectable object.
+/// Burn reserve object created on initial liquidity to hold MINIMUM_LIQUIDITY.
+/// This object is created during the initial liquidity mint and stores the
+/// reserved amount of LP tokens (MINIMUM_LIQUIDITY) that are intentionally
+/// excluded from user LP receipts. The burn reserve is a shared object:
+/// it is transferred with `transfer::share_object` so frontends, auditors,
+/// and anyone can query it on-chain to verify the locked/burned minimum LP.
 public struct BurnReserve has key, store {
     id: UID,
+    // Amount of LP tokens reserved (should equal MINIMUM_LIQUIDITY for initialized pools)
     amount: u64,
 }
 
@@ -103,35 +131,34 @@ public fun create_global_registry(ctx: &mut TxContext) {
         id: object::new(ctx),
         pools: table::new(ctx),
     };
-    
+
     let registry_id = object::uid_to_address(&registry.id);
-    
+
     event::emit(RegistryCreated {
         registry_id,
     });
-    
+
     transfer::share_object(registry);
 }
 
 // Create a new liquidity pool
-public fun create_pool<X, Y>(
-    registry: &mut GlobalPoolRegistry,
-    fee_bps: u64,
-    ctx: &mut TxContext
-) {
+public fun create_pool<X, Y>(registry: &mut GlobalPoolRegistry, fee_bps: u64, ctx: &mut TxContext) {
     assert!(fee_bps == FEE_LOW || fee_bps == FEE_MED || fee_bps == FEE_HIGH, E_INVALID_FEE);
 
     // Compute deterministic hash for this type pair (sorted to prevent duplicates)
     let ty_x = type_name::get_with_original_ids<X>().into_string().into_bytes();
     let ty_y = type_name::get_with_original_ids<Y>().into_string().into_bytes();
-    
+
+    // Prevent creating pool with same token types
+    assert!(ty_x != ty_y, E_SAME_TOKEN_PAIR);
+
     // Sort type names to ensure IOTA/KANARI and KANARI/IOTA get same hash
     let (first, second) = if (compare_vectors(&ty_x, &ty_y)) {
         (ty_x, ty_y)
     } else {
         (ty_y, ty_x)
     };
-    
+
     let mut concat = first;
     std::vector::append(&mut concat, second);
     let pair_hash = hash::blake2b256(&concat);
@@ -394,24 +421,52 @@ public fun remove_liquidity<X, Y>(
 }
 
 // Helper function for swap calculations with u128 to prevent overflow
-public fun calculate_swap_output(amount_in: u64, balance_in: u64, balance_out: u64, fee_bps: u64): u64 {
-    // Apply fee to input amount
-    let amount_in_with_fee = (amount_in as u128) * ((BASIS_POINTS - fee_bps) as u128);
+public fun calculate_swap_output(
+    amount_in: u64,
+    balance_in: u64,
+    balance_out: u64,
+    fee_bps: u64,
+): u64 {
+    // Quick return for zero input
+    if (amount_in == 0) {
+        0
+    } else {
+        // Apply fee to input amount (as u128)
+        let amount_in_with_fee = (amount_in as u128) * ((BPS_DENOMINATOR - fee_bps) as u128);
 
-    // Use u128 to prevent overflow
-    let balance_out_128 = (balance_out as u128);
-    let numerator = amount_in_with_fee * balance_out_128;
+        // Prepare operands in u128
+        let balance_out_128 = (balance_out as u128);
+        let balance_in_128 = (balance_in as u128);
+        let bps_denominator_128 = (BPS_DENOMINATOR as u128);
 
-    // Denominator: (balance_in * BASIS_POINTS) + amount_in_with_fee
-    let balance_in_128 = (balance_in as u128);
-    let basis_points_128 = (BASIS_POINTS as u128);
-    let denominator = balance_in_128 * basis_points_128 + amount_in_with_fee;
+        // Pre-checks to avoid u128 overflow on multiplies/adds
+        // Check numerator multiplication: amount_in_with_fee * balance_out_128 <= U128_MAX
+        if (amount_in_with_fee != 0 && balance_out_128 > (U128_MAX / amount_in_with_fee)) {
+            // Overflow would occur computing numerator
+            assert!(false, E_OVERFLOW);
+        };
 
-    // Ensure result fits in u64
-    let result_128 = numerator / denominator;
-    assert!(result_128 <= U64_MAX, E_OVERFLOW);
+        let numerator = amount_in_with_fee * balance_out_128;
 
-    (result_128 as u64)
+        // Check denominator multiplication: balance_in_128 * bps_denominator_128 <= U128_MAX
+        if (balance_in_128 != 0 && bps_denominator_128 > (U128_MAX / balance_in_128)) {
+            assert!(false, E_OVERFLOW);
+        };
+
+        let denom_prod = balance_in_128 * bps_denominator_128;
+        // Check addition won't overflow u128
+        if (denom_prod > (U128_MAX - amount_in_with_fee)) {
+            assert!(false, E_OVERFLOW);
+        };
+
+        let denominator = denom_prod + amount_in_with_fee;
+
+        // Perform division and ensure result fits into u64
+        let result_128 = numerator / denominator;
+        assert!(result_128 <= U64_MAX, E_OVERFLOW);
+
+        (result_128 as u64)
+    }
 }
 
 // Swap X for Y with slippage protection
@@ -492,7 +547,7 @@ public fun compare_vectors(v1: &vector<u8>, v2: &vector<u8>): bool {
     let len1 = std::vector::length(v1);
     let len2 = std::vector::length(v2);
     let min_len = if (len1 < len2) { len1 } else { len2 };
-    
+
     let mut i = 0;
     while (i < min_len) {
         let b1 = *std::vector::borrow(v1, i);
@@ -504,7 +559,7 @@ public fun compare_vectors(v1: &vector<u8>, v2: &vector<u8>): bool {
         };
         i = i + 1;
     };
-    
+
     // If all bytes equal up to min_len, shorter vector is "less"
     len1 <= len2
 }
@@ -515,18 +570,18 @@ public fun compare_vectors(v1: &vector<u8>, v2: &vector<u8>): bool {
 public fun pool_exists<X, Y>(registry: &GlobalPoolRegistry): bool {
     let ty_x = type_name::get_with_original_ids<X>().into_string().into_bytes();
     let ty_y = type_name::get_with_original_ids<Y>().into_string().into_bytes();
-    
+
     // Sort type names to match create_pool logic
     let (first, second) = if (compare_vectors(&ty_x, &ty_y)) {
         (ty_x, ty_y)
     } else {
         (ty_y, ty_x)
     };
-    
+
     let mut concat = first;
     std::vector::append(&mut concat, second);
     let pair_hash = hash::blake2b256(&concat);
-    
+
     table::contains(&registry.pools, pair_hash)
 }
 
@@ -534,18 +589,18 @@ public fun pool_exists<X, Y>(registry: &GlobalPoolRegistry): bool {
 public fun get_pool_address<X, Y>(registry: &GlobalPoolRegistry): Option<address> {
     let ty_x = type_name::get_with_original_ids<X>().into_string().into_bytes();
     let ty_y = type_name::get_with_original_ids<Y>().into_string().into_bytes();
-    
+
     // Sort type names to match create_pool logic
     let (first, second) = if (compare_vectors(&ty_x, &ty_y)) {
         (ty_x, ty_y)
     } else {
         (ty_y, ty_x)
     };
-    
+
     let mut concat = first;
     std::vector::append(&mut concat, second);
     let pair_hash = hash::blake2b256(&concat);
-    
+
     if (table::contains(&registry.pools, pair_hash)) {
         option::some(*table::borrow(&registry.pools, pair_hash))
     } else {
@@ -629,4 +684,10 @@ public fun get_amount_out<X, Y>(pool: &LiquidityPool<X, Y>, amount_in: u64, is_x
             pool.fee_bps,
         )
     }
+}
+
+/// Returns the BurnReserve object (read-only)
+/// Required to inspect the contents of the minimum locked liquidity object.
+public fun get_burn_reserve(burn_reserve: &BurnReserve): u64 {
+    burn_reserve.amount
 }

@@ -24,7 +24,8 @@ fun test_spread_functions() {
     // Use simple values
     let best_bid: u64 = 100u64;
     let best_ask: u64 = 105u64;
-    let spread = if (best_bid > 0 && best_ask > 0 && best_ask > best_bid) { best_ask - best_bid } else { 0 };
+    let spread = if (best_bid > 0 && best_ask > 0 && best_ask > best_bid) { best_ask - best_bid }
+    else { 0 };
     assert!(spread == 5, 3);
 }
 
@@ -75,9 +76,57 @@ fun test_calculate_quote_and_base_edge_cases() {
     assert!(base2 == base_amount2, 10);
 }
 
-
 // NOTE: tests that access module-internal constants or require creating
 // shared objects (OrderBook/GlobalOrderBookRegistry) must be written
 // as integration tests that create the objects via the module's entry
 // functions and assert abort codes. Those are omitted from this unit
 // test file which focuses on pure helpers.
+
+#[test]
+fun test_calculate_zero_quote() {
+    // If price << PRICE_SCALE, the computed quote may floor to zero
+    let base_amount: u64 = 1;
+    let price: u64 = 1u64; // much smaller than PRICE_SCALE (1e9)
+
+    let quote = DeepBook::calculate_quote_amount(base_amount, price);
+    assert!(quote == 0, 11);
+}
+
+#[test]
+fun test_pow10_u128_values() {
+    // pow10_u128 should return powers of ten as u128
+    let p0 = DeepBook::pow10_u128(0u8);
+    assert!(p0 == 1u128, 12);
+
+    let p1 = DeepBook::pow10_u128(1u8);
+    assert!(p1 == 10u128, 13);
+
+    let p18 = DeepBook::pow10_u128(18u8);
+    assert!(p18 == 1000000000000000000u128, 14);
+}
+
+#[test]
+fun test_compare_vectors_length_and_content() {
+    // [1,2] vs [1,2,0] -> shorter (prefix) is considered less
+    let mut a = vector::empty<u8>();
+    vector::push_back(&mut a, 1u8);
+    vector::push_back(&mut a, 2u8);
+
+    let mut b = vector::empty<u8>();
+    vector::push_back(&mut b, 1u8);
+    vector::push_back(&mut b, 2u8);
+    vector::push_back(&mut b, 0u8);
+
+    assert!(DeepBook::compare_vectors(&a, &b), 15);
+}
+
+#[test]
+fun test_spread_no_bid_or_ask() {
+    // If there's no valid bid or ask, the spread computation in helpers
+    // should default to 0 (mirrors defensive patterns used elsewhere)
+    let best_bid: u64 = 0u64;
+    let best_ask: u64 = 0u64;
+    let spread = if (best_bid > 0 && best_ask > 0 && best_ask > best_bid) { best_ask - best_bid }
+    else { 0 };
+    assert!(spread == 0, 16);
+}

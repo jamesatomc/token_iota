@@ -1,8 +1,8 @@
 /// DEX Factory for creating and managing liquidity pools
 module kanari_network::DEXFactory;
 
-use iota::coin;
 use iota::clock::Clock;
+use iota::coin;
 use kanari_network::DEX::{Self, LiquidityPool, LPToken, GlobalPoolRegistry};
 use kanari_network::PriceOracle;
 
@@ -19,6 +19,11 @@ public entry fun create_pool<X, Y>(
     ctx: &mut TxContext,
 ) {
     DEX::create_pool<X, Y>(registry, fee_bps, ctx);
+}
+
+/// Helper for frontends: get pool address for a token pair (any order)
+public fun get_pool_address<X, Y>(registry: &GlobalPoolRegistry): Option<address> {
+    DEX::get_pool_address<X, Y>(registry)
 }
 
 /// Add liquidity to an existing pool

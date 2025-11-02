@@ -17,6 +17,11 @@ const E_INVALID_FEE: u64 = 6;
 const E_INVALID_DEPTH: u64 = 7;
 const E_ORDERBOOK_ALREADY_EXISTS: u64 = 8;
 const E_SAME_TOKEN_PAIR: u64 = 9;
+const E_OVERFLOW: u64 = 10;
+const E_POST_ONLY_VIOLATION: u64 = 11;
+
+// depth limits
+const MAX_DEPTH: u64 = 1_000;
 
 // Safe upper bound for casting u128 -> u64
 const U64_MAX: u128 = 18446744073709551615u128;
@@ -86,10 +91,27 @@ public struct GlobalOrderBookRegistry has key {
     id: UID,
     // Maps type-pair hash (blake2b256 of concatenated type names) to book address
     books: Table<vector<u8>, address>,
+    // owner of the registry (can change book admins)
+    owner: address,
+    // Maps book address -> admin address (who can withdraw fees)
+    admins: Table<address, address>,
 }
 
 public struct OrderBookRegistryCreated has copy, drop {
     registry_id: address,
+}
+
+public struct FeesWithdrawn has copy, drop {
+    book_id: address,
+    to: address,
+    base_amount: u64,
+    quote_amount: u64,
+}
+
+public struct BookAdminChanged has copy, drop {
+    registry_id: address,
+    book_id: address,
+    new_admin: address,
 }
 
 /// Internal: create a new order book with explicit decimals
@@ -108,7 +130,7 @@ public fun create_order_book_with_decimals<Base, Quote>(
     assert!(fee_bps <= 1000, E_INVALID_FEE); // max 10%
     // validate depth (1 .. 10_000)
     assert!(max_depth > 0, E_INVALID_DEPTH);
-    assert!(max_depth <= 10000, E_INVALID_DEPTH);
+    assert!(max_depth <= MAX_DEPTH, E_INVALID_DEPTH);
 
     let book = OrderBook<Base, Quote> {
         id: object::new(ctx),
@@ -133,15 +155,18 @@ public fun create_order_book_with_decimals<Base, Quote>(
 }
 
 /// Create global registry for order books (call once during deployment)
-public fun create_global_registry(ctx: &mut tx_context::TxContext) {
+public fun create_global_registry(ctx: &mut tx_context::TxContext): address {
     let registry = GlobalOrderBookRegistry {
         id: object::new(ctx),
         books: table::new(ctx),
+        owner: tx_context::sender(ctx),
+        admins: table::new(ctx),
     };
 
     let registry_id = object::uid_to_address(&registry.id);
     event::emit(OrderBookRegistryCreated { registry_id });
     transfer::share_object(registry);
+    registry_id
 }
 
 /// Helper function to compare two vectors lexicographically (returns true if v1 <= v2)
@@ -188,7 +213,7 @@ public fun create_order_book_with_registry_with_decimals<Base, Quote>(
 ) {
     assert!(fee_bps <= 1000, E_INVALID_FEE); // max 10%
     assert!(max_depth > 0, E_INVALID_DEPTH);
-    assert!(max_depth <= 10000, E_INVALID_DEPTH);
+    assert!(max_depth <= MAX_DEPTH, E_INVALID_DEPTH);
 
     // Compute deterministic hash for this type pair (sorted to prevent duplicates)
     let ty_x = type_name::get_with_original_ids<Base>().into_string().into_bytes();
@@ -230,6 +255,8 @@ public fun create_order_book_with_registry_with_decimals<Base, Quote>(
 
     // Register book in registry
     table::add(&mut registry.books, pair_hash, book_id);
+    // Set the creator as the admin for this book
+    table::add(&mut registry.admins, book_id, tx_context::sender(ctx));
 
     event::emit(OrderBookCreated { book_id });
 
@@ -279,7 +306,7 @@ public fun get_book_address<Base, Quote>(registry: &GlobalOrderBookRegistry): Op
 }
 
 /// Factory: return existing book address for pair or create+register a new one
-public fun get_or_create_order_book_with_decimals<Base, Quote>(
+public entry fun get_or_create_order_book_with_decimals<Base, Quote>(
     registry: &mut GlobalOrderBookRegistry,
     fee_bps: u64,
     max_depth: u64,
@@ -311,7 +338,7 @@ public fun get_or_create_order_book_with_decimals<Base, Quote>(
         // create and register
         assert!(fee_bps <= 1000, E_INVALID_FEE);
         assert!(max_depth > 0, E_INVALID_DEPTH);
-        assert!(max_depth <= 10000, E_INVALID_DEPTH);
+        assert!(max_depth <= MAX_DEPTH, E_INVALID_DEPTH);
 
         let book = OrderBook<Base, Quote> {
             id: object::new(ctx),
@@ -330,21 +357,25 @@ public fun get_or_create_order_book_with_decimals<Base, Quote>(
 
         let book_id = object::uid_to_address(&book.id);
         table::add(&mut registry.books, pair_hash, book_id);
+        // set creator as admin
+        table::add(&mut registry.admins, book_id, tx_context::sender(ctx));
         event::emit(OrderBookCreated { book_id });
         transfer::share_object(book);
         book_id
     }
 }
 
-/// Place a limit buy order (bid)
-/// price: normalized price (quote_amount * PRICE_SCALE / base_amount)
-/// quantity: amount of base token to buy
-/// payment: quote token payment (must be >= quantity * price / PRICE_SCALE)
+// Place a buy order (supports order types)
+// price: normalized price (quote_amount * PRICE_SCALE / base_amount)
+// quantity: amount of base token to buy
+// payment: quote token payment (must be >= quantity * price / PRICE_SCALE)
+// order_type: 0 = limit, 1 = IOC, 2 = FOK, 3 = PostOnly
 public entry fun place_bid<Base, Quote>(
     book: &mut OrderBook<Base, Quote>,
     price: u64,
     quantity: u64,
     mut payment: Coin<Quote>,
+    order_type: u8,
     ctx: &mut tx_context::TxContext,
 ) {
     assert!(price > 0, E_INVALID_PRICE);
@@ -352,11 +383,40 @@ public entry fun place_bid<Base, Quote>(
 
     let maker = tx_context::sender(ctx);
 
+    // Pre-checks for special order types
+    // FOK: ensure there is sufficient available ask quantity at <= price before consuming funds
+    if (order_type == 2u8) {
+        let mut total_available = 0u64;
+        let mut k = 0u64;
+        while (k < vector::length(&book.asks)) {
+            let a = vector::borrow(&book.asks, k);
+            if (a.price <= price) {
+                total_available = total_available + (a.quantity - a.filled);
+                k = k + 1;
+            } else {
+                break
+            };
+        };
+        assert!(total_available >= quantity, E_INSUFFICIENT_LIQUIDITY);
+    };
+
+    // PostOnly: if the order would match immediately, abort
+    if (order_type == 3u8) {
+        if (vector::length(&book.asks) > 0) {
+            let best = vector::borrow(&book.asks, 0);
+            assert!(best.price > price, E_POST_ONLY_VIOLATION);
+        };
+    };
+
     // Calculate required quote amount with decimals taken into account:
     // required_quote = (quantity * price * 10^{quote_decimals}) / (PRICE_SCALE * 10^{base_decimals})
     let scale_num = pow10_u128(book.quote_decimals);
     let scale_den = pow10_u128(book.base_decimals);
-    let required_quote_u128 = ((quantity as u128) * (price as u128) * scale_num) / (PRICE_SCALE * scale_den);
+    let required_quote_u128 =
+        ((quantity as u128) * (price as u128) * scale_num) / (PRICE_SCALE * scale_den);
+    // Prevent orders that would round the required quote to zero (ineffective)
+    // or that require more than u64 max (can't represent in balances).
+    assert!(required_quote_u128 > 0, E_INSUFFICIENT_LIQUIDITY);
     assert!(required_quote_u128 <= U64_MAX, E_INSUFFICIENT_LIQUIDITY);
     let required_quote = required_quote_u128 as u64;
     let payment_value = coin::value(&payment);
@@ -376,6 +436,8 @@ public entry fun place_bid<Base, Quote>(
     balance::join(&mut book.quote_balance, payment_balance);
 
     let order_id = book.next_order_id;
+    // Prevent next_order_id overflow
+    assert!((order_id as u128) < U64_MAX, E_OVERFLOW);
     book.next_order_id = order_id + 1;
 
     let mut remaining = quantity;
@@ -396,7 +458,11 @@ public entry fun place_bid<Base, Quote>(
             let price_u128 = (match_price as u128);
             // trade_value = matched * price / PRICE_SCALE adjusted for decimals
             // = (matched * price * 10^{quote_decimals}) / (PRICE_SCALE * 10^{base_decimals})
-            let trade_value_u128 = (matched_u128 * price_u128 * pow10_u128(book.quote_decimals)) / (PRICE_SCALE * pow10_u128(book.base_decimals));
+            let trade_value_u128 =
+                (matched_u128 * price_u128 * pow10_u128(book.quote_decimals)) / (PRICE_SCALE * pow10_u128(book.base_decimals));
+
+            // ensure trade produces a non-zero quote amount (avoid silent rounding to zero)
+            assert!(trade_value_u128 > 0, E_INSUFFICIENT_LIQUIDITY);
 
             // bounds check before casting
             assert!(trade_value_u128 <= U64_MAX, E_INSUFFICIENT_LIQUIDITY);
@@ -412,6 +478,9 @@ public entry fun place_bid<Base, Quote>(
 
             // Update order
             ask.filled = ask.filled + matched;
+            // Reduce the stored locked amount on the ask by the base units matched
+            // (locked_amount represents remaining locked base for asks)
+            ask.locked_amount = ask.locked_amount - matched;
             remaining = remaining - matched;
             // only reduce locked by the quoted value used for match (fee is taken from that amount)
             remaining_locked = remaining_locked - quote_amount;
@@ -453,77 +522,97 @@ public entry fun place_bid<Base, Quote>(
             break // asks are sorted, no more matches possible
         };
     };
-
-    // If there's remaining quantity, add as resting order
+    // If there's remaining quantity, handle based on order type
     if (remaining > 0) {
-        let new_order = LimitOrder {
-            id: order_id,
-            maker,
-            is_bid: true,
-            price,
-            quantity: remaining,
-            filled: 0,
-            locked_amount: remaining_locked,
-        };
-
-        // Insert in sorted order (highest price first)
-        let mut len = vector::length(&book.bids);
-
-        // If side is full, remove worst bid (last element) and refund its unmatched locked quote
-        if (len >= book.max_depth) {
-            let worst = vector::pop_back(&mut book.bids);
-            let unmatched = worst.quantity - worst.filled;
-            if (unmatched > 0) {
-                let refund_quote_u128 = ((unmatched as u128) * (worst.price as u128) * pow10_u128(book.quote_decimals)) / (PRICE_SCALE * pow10_u128(book.base_decimals));
-                let refund_quote = if (refund_quote_u128 <= U64_MAX) { refund_quote_u128 as u64 } else { 0u64 };
-                if (refund_quote > 0) {
-                    let refund = balance::split(&mut book.quote_balance, refund_quote);
-                    transfer::public_transfer(
-                        coin::from_balance(refund, ctx),
-                        worst.maker,
-                    );
-                };
+        // IOC: refund remaining locked quote back to maker and do NOT add resting order
+        if (order_type == 1u8) {
+            if (remaining_locked > 0) {
+                let refund = balance::split(&mut book.quote_balance, remaining_locked);
+                transfer::public_transfer(
+                    coin::from_balance(refund, ctx),
+                    maker,
+                );
             };
-            len = len - 1;
-        };
-
-        let mut insert_pos = len;
-        let mut j = 0;
-        while (j < len) {
-            let bid = vector::borrow(&book.bids, j);
-            if (price > bid.price) {
-                insert_pos = j;
-                break
-            };
-            j = j + 1;
-        };
-
-        if (insert_pos == len) {
-            vector::push_back(&mut book.bids, new_order);
         } else {
-            vector::insert(&mut book.bids, new_order, insert_pos);
-        };
+            let new_order = LimitOrder {
+                id: order_id,
+                maker,
+                is_bid: true,
+                price,
+                quantity: remaining,
+                filled: 0,
+                locked_amount: remaining_locked,
+            };
 
-        event::emit(OrderPlaced {
-            book_id: object::uid_to_address(&book.id),
-            order_id,
-            maker,
-            is_bid: true,
-            price,
-            quantity: remaining,
-        });
+            // Insert in sorted order (highest price first)
+            let mut len = vector::length(&book.bids);
+
+            // If side is full, remove worst bid (last element) and refund its unmatched locked quote
+            if (len >= book.max_depth) {
+                let worst = vector::pop_back(&mut book.bids);
+                let unmatched = worst.quantity - worst.filled;
+                if (unmatched > 0) {
+                    // Use the stored locked_amount for the worst order and refund proportionally
+                    // refund = worst.locked_amount * (unmatched / worst.quantity)
+                    // Do proportional arithmetic in u128 to avoid precision loss.
+                    let refund_u128 =
+                        ((worst.locked_amount as u128) * (unmatched as u128)) / (worst.quantity as u128);
+                    // prevent silent loss due to overflow — abort instead
+                    assert!(refund_u128 <= U64_MAX, E_OVERFLOW);
+                    let refund_quote = refund_u128 as u64;
+                    if (refund_quote > 0) {
+                        let refund = balance::split(&mut book.quote_balance, refund_quote);
+                        transfer::public_transfer(
+                            coin::from_balance(refund, ctx),
+                            worst.maker,
+                        );
+                    };
+                };
+                len = len - 1;
+            };
+
+            let mut insert_pos = len;
+            let mut j = 0;
+            while (j < len) {
+                let bid = vector::borrow(&book.bids, j);
+                // insert before strictly lower-priced bids; for equal price keep FIFO by not inserting before
+                // explicit tie-breaker by order_id is present for clarity (new orders have larger ids so won't preempt older ones)
+                if (price > bid.price || (price == bid.price && order_id < bid.id)) {
+                    insert_pos = j;
+                    break
+                };
+                j = j + 1;
+            };
+
+            if (insert_pos == len) {
+                vector::push_back(&mut book.bids, new_order);
+            } else {
+                vector::insert(&mut book.bids, new_order, insert_pos);
+            };
+
+            event::emit(OrderPlaced {
+                book_id: object::uid_to_address(&book.id),
+                order_id,
+                maker,
+                is_bid: true,
+                price,
+                quantity: remaining,
+            });
+        };
     };
 }
 
-/// Place a limit sell order (ask)
+/// Place a sell order (supports order types)
 /// price: normalized price (quote_amount * PRICE_SCALE / base_amount)
 /// quantity: amount of base token to sell
 /// base_coin: base token to sell
+/// order_type: 0 = limit, 1 = IOC, 2 = FOK, 3 = PostOnly
 public entry fun place_ask<Base, Quote>(
     book: &mut OrderBook<Base, Quote>,
     price: u64,
     quantity: u64,
     mut base_coin: Coin<Base>,
+    order_type: u8,
     ctx: &mut tx_context::TxContext,
 ) {
     assert!(price > 0, E_INVALID_PRICE);
@@ -533,6 +622,41 @@ public entry fun place_ask<Base, Quote>(
     assert!(coin_value >= quantity, E_INSUFFICIENT_LIQUIDITY);
 
     let maker = tx_context::sender(ctx);
+
+    // Pre-checks for special order types
+    // FOK: ensure there is sufficient available bid quantity at >= price before consuming funds
+    if (order_type == 2u8) {
+        let mut total_available = 0u64;
+        let mut k = 0u64;
+        while (k < vector::length(&book.bids)) {
+            let b = vector::borrow(&book.bids, k);
+            if (b.price >= price) {
+                total_available = total_available + (b.quantity - b.filled);
+                k = k + 1;
+            } else {
+                break
+            };
+        };
+        assert!(total_available >= quantity, E_INSUFFICIENT_LIQUIDITY);
+    };
+
+    // PostOnly: if the order would match immediately, abort
+    if (order_type == 3u8) {
+        if (vector::length(&book.bids) > 0) {
+            let best = vector::borrow(&book.bids, 0);
+            assert!(best.price < price, E_POST_ONLY_VIOLATION);
+        };
+    };
+
+    // Defensive pre-check: compute the quote value that would correspond to the
+    // full quantity at the provided price. Reject orders that would round to
+    // zero or whose computed quote would exceed u64 bounds. This avoids
+    // allowing orders that will never match or that would later trigger
+    // overflow/unsafe casts during refunds or matching.
+    let potential_quote_u128 =
+        ((quantity as u128) * (price as u128) * pow10_u128(book.quote_decimals)) / (PRICE_SCALE * pow10_u128(book.base_decimals));
+    assert!(potential_quote_u128 > 0, E_INSUFFICIENT_LIQUIDITY);
+    assert!(potential_quote_u128 <= U64_MAX, E_OVERFLOW);
 
     // Split exact amount needed, return excess
     let locked_base = if (coin_value > quantity) {
@@ -566,7 +690,11 @@ public entry fun place_ask<Base, Quote>(
             let matched_u128 = (matched as u128);
             let price_u128 = (match_price as u128);
             // trade_value = matched * price / PRICE_SCALE adjusted for decimals
-            let trade_value_u128 = (matched_u128 * price_u128 * pow10_u128(book.quote_decimals)) / (PRICE_SCALE * pow10_u128(book.base_decimals));
+            let trade_value_u128 =
+                (matched_u128 * price_u128 * pow10_u128(book.quote_decimals)) / (PRICE_SCALE * pow10_u128(book.base_decimals));
+
+            // ensure trade produces a non-zero quote amount (avoid silent rounding to zero)
+            assert!(trade_value_u128 > 0, E_INSUFFICIENT_LIQUIDITY);
 
             // bounds check before casting
             assert!(trade_value_u128 <= U64_MAX, E_INSUFFICIENT_LIQUIDITY);
@@ -579,6 +707,11 @@ public entry fun place_ask<Base, Quote>(
 
             // Update order
             bid.filled = bid.filled + matched;
+            // Reduce the stored locked amount on the bid by the quote amount consumed
+            // (locked_amount represents remaining locked quote for bids)
+            if (quote_amount > 0) {
+                bid.locked_amount = bid.locked_amount - quote_amount;
+            };
             remaining = remaining - matched;
 
             // Transfer quote to taker (seller) minus fee (fee is collected from the quote provided by maker)
@@ -620,63 +753,80 @@ public entry fun place_ask<Base, Quote>(
         };
     };
 
-    // If there's remaining quantity, add as resting order
+    // If there's remaining quantity, handle based on order type
     if (remaining > 0) {
-        let new_order = LimitOrder {
-            id: order_id,
-            maker,
-            is_bid: false,
-            price,
-            quantity: remaining,
-            filled: 0,
-            locked_amount: remaining, // locked base amount
-        };
-
-        // Insert in sorted order (lowest price first)
-        let mut len = vector::length(&book.asks);
-
-        // If side is full, remove worst ask (last element) and refund its unmatched locked base
-        if (len >= book.max_depth) {
-            let worst = vector::pop_back(&mut book.asks);
-            let unmatched = worst.quantity - worst.filled;
-            if (unmatched > 0) {
-                let refund_base = unmatched;
-                if (refund_base > 0) {
-                    let refund = balance::split(&mut book.base_balance, refund_base);
-                    transfer::public_transfer(
-                        coin::from_balance(refund, ctx),
-                        worst.maker,
-                    );
-                };
+        // IOC: refund remaining locked base back to maker and do NOT add resting order
+        if (order_type == 1u8) {
+            if (remaining > 0) {
+                let refund = balance::split(&mut book.base_balance, remaining);
+                transfer::public_transfer(
+                    coin::from_balance(refund, ctx),
+                    maker,
+                );
             };
-            len = len - 1;
-        };
-
-        let mut insert_pos = len;
-        let mut j = 0;
-        while (j < len) {
-            let ask = vector::borrow(&book.asks, j);
-            if (price < ask.price) {
-                insert_pos = j;
-                break
-            };
-            j = j + 1;
-        };
-
-        if (insert_pos == len) {
-            vector::push_back(&mut book.asks, new_order);
         } else {
-            vector::insert(&mut book.asks, new_order, insert_pos);
-        };
+            let new_order = LimitOrder {
+                id: order_id,
+                maker,
+                is_bid: false,
+                price,
+                quantity: remaining,
+                filled: 0,
+                locked_amount: remaining, // locked base amount
+            };
 
-        event::emit(OrderPlaced {
-            book_id: object::uid_to_address(&book.id),
-            order_id,
-            maker,
-            is_bid: false,
-            price,
-            quantity: remaining,
-        });
+            // Insert in sorted order (lowest price first)
+            let mut len = vector::length(&book.asks);
+
+            // If side is full, remove worst ask (last element) and refund its unmatched locked base
+            if (len >= book.max_depth) {
+                let worst = vector::pop_back(&mut book.asks);
+                let unmatched = worst.quantity - worst.filled;
+                if (unmatched > 0) {
+                    // Use stored locked_amount on the ask for refunding (should equal remaining base locked)
+                    // refund = proportion of worst.locked_amount corresponding to unmatched
+                    let refund_u128 =
+                        ((worst.locked_amount as u128) * (unmatched as u128)) / (worst.quantity as u128);
+                    assert!(refund_u128 <= U64_MAX, E_OVERFLOW);
+                    let refund_base = refund_u128 as u64;
+                    if (refund_base > 0) {
+                        let refund = balance::split(&mut book.base_balance, refund_base);
+                        transfer::public_transfer(
+                            coin::from_balance(refund, ctx),
+                            worst.maker,
+                        );
+                    };
+                };
+                len = len - 1;
+            };
+
+            let mut insert_pos = len;
+            let mut j = 0;
+            while (j < len) {
+                let ask = vector::borrow(&book.asks, j);
+                // insert before strictly higher-priced asks; for equal price keep FIFO by not inserting before
+                if (price < ask.price || (price == ask.price && order_id < ask.id)) {
+                    insert_pos = j;
+                    break
+                };
+                j = j + 1;
+            };
+
+            if (insert_pos == len) {
+                vector::push_back(&mut book.asks, new_order);
+            } else {
+                vector::insert(&mut book.asks, new_order, insert_pos);
+            };
+
+            event::emit(OrderPlaced {
+                book_id: object::uid_to_address(&book.id),
+                order_id,
+                maker,
+                is_bid: false,
+                price,
+                quantity: remaining,
+            });
+        };
     };
 }
 
@@ -697,16 +847,20 @@ public entry fun cancel_order<Base, Quote>(
             assert!(bid.maker == caller, E_UNAUTHORIZED);
 
             // Calculate unmatched amount to refund
-            let unmatched_quantity = bid.quantity - bid.filled;
-            let unmatched_quote_u128 = ((unmatched_quantity as u128) * (bid.price as u128) * pow10_u128(book.quote_decimals)) / (PRICE_SCALE * pow10_u128(book.base_decimals));
-            let unmatched_quote = if (unmatched_quote_u128 <= U64_MAX) { unmatched_quote_u128 as u64 } else { 0u64 };
+            let unmatched_quote_u128 =
+                ((bid.locked_amount as u128) * ((bid.quantity - bid.filled) as u128)) / (bid.quantity as u128);
+            // prevent silent-zero/overflow on casts
+            assert!(unmatched_quote_u128 <= U64_MAX, E_OVERFLOW);
+            let unmatched_quote = unmatched_quote_u128 as u64;
 
+            // Capture refund amount then remove order to avoid borrow conflict
+            let refund_amount = unmatched_quote;
             // Remove order first
             vector::remove(&mut book.bids, i);
 
             // Return locked quote tokens to maker
-            if (unmatched_quote > 0) {
-                let refund = balance::split(&mut book.quote_balance, unmatched_quote);
+            if (refund_amount > 0) {
+                let refund = balance::split(&mut book.quote_balance, refund_amount);
                 transfer::public_transfer(
                     coin::from_balance(refund, ctx),
                     caller,
@@ -730,15 +884,14 @@ public entry fun cancel_order<Base, Quote>(
         if (ask.id == order_id) {
             assert!(ask.maker == caller, E_UNAUTHORIZED);
 
-            // Calculate unmatched amount to refund
-            let unmatched_quantity = ask.quantity - ask.filled;
-
+            // Capture refund amount before mutably borrowing the vector
+            let refund_base = ask.locked_amount;
             // Remove order first
             vector::remove(&mut book.asks, j);
 
             // Return locked base tokens to maker
-            if (unmatched_quantity > 0) {
-                let refund = balance::split(&mut book.base_balance, unmatched_quantity);
+            if (refund_base > 0) {
+                let refund = balance::split(&mut book.base_balance, refund_base);
                 transfer::public_transfer(
                     coin::from_balance(refund, ctx),
                     caller,
@@ -826,6 +979,16 @@ public fun get_book_depth<Base, Quote>(book: &OrderBook<Base, Quote>): (u64, u64
     (total_bid_quantity, total_ask_quantity)
 }
 
+/// Get current fee balances (base, quote) for a book — useful for testing and monitoring
+public fun get_fee_balances<Base, Quote>(book: &OrderBook<Base, Quote>): (u64, u64) {
+    (balance::value(&book.fee_balance_base), balance::value(&book.fee_balance_quote))
+}
+
+/// Get current locked balances (base, quote) in the order book
+public fun get_locked_balances<Base, Quote>(book: &OrderBook<Base, Quote>): (u64, u64) {
+    (balance::value(&book.base_balance), balance::value(&book.quote_balance))
+}
+
 /// Calculate quote amount for given base amount at price
 public fun calculate_quote_amount(base_amount: u64, price: u64): u64 {
     ((base_amount as u128) * (price as u128) / PRICE_SCALE) as u64
@@ -843,7 +1006,8 @@ public fun calculate_quote_amount_with_decimals(
     base_decimals: u8,
     quote_decimals: u8,
 ): u64 {
-    let res_u128 = ((base_amount as u128) * (price as u128) * pow10_u128(quote_decimals)) / (PRICE_SCALE * pow10_u128(base_decimals));
+    let res_u128 =
+        ((base_amount as u128) * (price as u128) * pow10_u128(quote_decimals)) / (PRICE_SCALE * pow10_u128(base_decimals));
     assert!(res_u128 <= U64_MAX, E_INSUFFICIENT_LIQUIDITY);
     res_u128 as u64
 }
@@ -855,9 +1019,39 @@ public fun calculate_base_amount_with_decimals(
     base_decimals: u8,
     quote_decimals: u8,
 ): u64 {
-    let res_u128 = ((quote_amount as u128) * (PRICE_SCALE) * pow10_u128(base_decimals)) / ((price as u128) * pow10_u128(quote_decimals));
+    let res_u128 =
+        ((quote_amount as u128) * (PRICE_SCALE) * pow10_u128(base_decimals)) / ((price as u128) * pow10_u128(quote_decimals));
     assert!(res_u128 <= U64_MAX, E_INVALID_PRICE);
     res_u128 as u64
+}
+
+// Test helpers: expose checked arithmetic used in matching/refunds so tests can
+// assert that the module-level prechecks and overflow guards behave as
+// expected without needing to craft shared objects or Coins in the harness.
+// These are public so test modules can call them.
+public fun validate_quote_capacity(
+    price: u64,
+    quantity: u64,
+    base_decimals: u8,
+    quote_decimals: u8,
+) {
+    let required_quote_u128 =
+        ((quantity as u128) * (price as u128) * pow10_u128(quote_decimals)) / (PRICE_SCALE * pow10_u128(base_decimals));
+    // same checks as place_bid precheck
+    assert!(required_quote_u128 > 0, E_INSUFFICIENT_LIQUIDITY);
+    assert!(required_quote_u128 <= U64_MAX, E_INSUFFICIENT_LIQUIDITY);
+}
+
+public fun check_refund_overflow(
+    unmatched: u128,
+    price: u128,
+    base_decimals: u8,
+    quote_decimals: u8,
+) {
+    let refund_quote_u128 =
+        (unmatched * price * pow10_u128(quote_decimals)) / (PRICE_SCALE * pow10_u128(base_decimals));
+    // same assertion used in eviction/cancel refund logic
+    assert!(refund_quote_u128 <= U64_MAX, E_OVERFLOW);
 }
 
 /// Get all bids in the order book
@@ -870,6 +1064,31 @@ public fun get_all_asks<Base, Quote>(book: &OrderBook<Base, Quote>): vector<Limi
     book.asks
 }
 
+/// Helper: get locked_amount for a bid at index
+public fun get_bid_locked_amount_at<Base, Quote>(book: &OrderBook<Base, Quote>, index: u64): u64 {
+    let b = vector::borrow(&book.bids, index);
+    b.locked_amount
+}
+
+/// Helper: get locked_amount for an ask at index
+public fun get_ask_locked_amount_at<Base, Quote>(book: &OrderBook<Base, Quote>, index: u64): u64 {
+    let a = vector::borrow(&book.asks, index);
+    a.locked_amount
+}
+
+/// Helper: return the order UID address for bid at index
+/// Helper: return the order id (u64 counter) for bid at index
+public fun get_bid_id_at<Base, Quote>(book: &OrderBook<Base, Quote>, index: u64): u64 {
+    let b = vector::borrow(&book.bids, index);
+    b.id
+}
+
+/// Helper: return the order id (u64 counter) for ask at index
+public fun get_ask_id_at<Base, Quote>(book: &OrderBook<Base, Quote>, index: u64): u64 {
+    let a = vector::borrow(&book.asks, index);
+    a.id
+}
+
 /// Get a specific bid by index
 public fun get_bid_at<Base, Quote>(book: &OrderBook<Base, Quote>, index: u64): &LimitOrder {
     vector::borrow(&book.bids, index)
@@ -878,4 +1097,76 @@ public fun get_bid_at<Base, Quote>(book: &OrderBook<Base, Quote>, index: u64): &
 /// Get a specific ask by index
 public fun get_ask_at<Base, Quote>(book: &OrderBook<Base, Quote>, index: u64): &LimitOrder {
     vector::borrow(&book.asks, index)
+}
+
+/// Get admin for a book from the registry (returns None if not set)
+public fun get_book_admin(registry: &GlobalOrderBookRegistry, book_addr: address): Option<address> {
+    if (table::contains(&registry.admins, book_addr)) {
+        option::some(*table::borrow(&registry.admins, book_addr))
+    } else {
+        option::none<address>()
+    }
+}
+
+/// Change book admin (only registry owner can call)
+public entry fun set_book_admin(
+    registry: &mut GlobalOrderBookRegistry,
+    book_addr: address,
+    new_admin: address,
+    ctx: &mut tx_context::TxContext,
+) {
+    let caller = tx_context::sender(ctx);
+    assert!(caller == registry.owner, E_UNAUTHORIZED);
+
+    // require book exists
+    // Note: we don't check pair hash here; caller provides book address
+    if (table::contains(&registry.admins, book_addr)) {
+        table::remove(&mut registry.admins, book_addr);
+    };
+    table::add(&mut registry.admins, book_addr, new_admin);
+
+    event::emit(BookAdminChanged {
+        registry_id: object::uid_to_address(&registry.id),
+        book_id: book_addr,
+        new_admin,
+    });
+}
+
+/// Withdraw collected fees (only callable by book admin as set in registry)
+public entry fun withdraw_fees<Base, Quote>(
+    registry: &mut GlobalOrderBookRegistry,
+    book: &mut OrderBook<Base, Quote>,
+    to: address,
+    base_amount: u64,
+    quote_amount: u64,
+    ctx: &mut tx_context::TxContext,
+) {
+    let caller = tx_context::sender(ctx);
+    let book_addr = object::uid_to_address(&book.id);
+    assert!(table::contains(&registry.admins, book_addr), E_UNAUTHORIZED);
+    let admin = *table::borrow(&registry.admins, book_addr);
+    assert!(caller == admin, E_UNAUTHORIZED);
+
+    if (base_amount > 0) {
+        let base_part = balance::split(&mut book.fee_balance_base, base_amount);
+        transfer::public_transfer(
+            coin::from_balance(base_part, ctx),
+            to,
+        );
+    };
+
+    if (quote_amount > 0) {
+        let quote_part = balance::split(&mut book.fee_balance_quote, quote_amount);
+        transfer::public_transfer(
+            coin::from_balance(quote_part, ctx),
+            to,
+        );
+    };
+
+    event::emit(FeesWithdrawn {
+        book_id: book_addr,
+        to,
+        base_amount,
+        quote_amount,
+    });
 }

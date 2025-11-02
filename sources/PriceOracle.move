@@ -10,6 +10,7 @@ use kanari_network::DEX::LiquidityPool;
 const E_INVALID_OBSERVATION: u64 = 1;
 const E_NO_OBSERVATIONS: u64 = 2;
 const E_INSUFFICIENT_LIQUIDITY: u64 = 3;
+const E_POOL_MISMATCH: u64 = 4;
 
 // Price precision (9 decimals for accurate calculations)
 const PRICE_PRECISION: u128 = 1_000_000_000;
@@ -22,16 +23,16 @@ const MIN_OBSERVATION_INTERVAL: u64 = 10; // 10 seconds
 
 /// Single price observation at a specific time
 public struct Observation has copy, drop, store {
-    timestamp: u64,         // Unix timestamp in seconds
+    timestamp: u64, // Unix timestamp in seconds
     price_cumulative: u128, // Cumulative price (price * time elapsed)
 }
 
 /// TWAP Price Oracle for a token pair
 public struct PriceOracle<phantom X, phantom Y> has key {
     id: UID,
-    pool_id: address,                   // Reference to liquidity pool
-    observations: vector<Observation>,  // Sorted by timestamp
-    max_observations: u64,              // Limit to save gas
+    pool_id: address, // Reference to liquidity pool
+    observations: vector<Observation>, // Sorted by timestamp
+    max_observations: u64, // Limit to save gas
     last_price_cumulative: u128,
 }
 
@@ -62,7 +63,7 @@ public fun create_oracle<X, Y>(
     pool: &LiquidityPool<X, Y>,
     max_observations: u64,
     clock: &Clock,
-    ctx: &mut TxContext
+    ctx: &mut TxContext,
 ): PriceOracle<X, Y> {
     assert!(max_observations > 0, E_INVALID_OBSERVATION);
 
@@ -71,10 +72,13 @@ public fun create_oracle<X, Y>(
 
     // Create initial observation
     let mut observations = vector::empty<Observation>();
-    vector::push_back(&mut observations, Observation {
-        timestamp: current_time,
-        price_cumulative: 0,
-    });
+    vector::push_back(
+        &mut observations,
+        Observation {
+            timestamp: current_time,
+            price_cumulative: 0,
+        },
+    );
 
     let oracle = PriceOracle<X, Y> {
         id: object::new(ctx),
@@ -100,7 +104,7 @@ public fun create_and_share_oracle<X, Y>(
     pool: &LiquidityPool<X, Y>,
     max_observations: u64,
     clock: &Clock,
-    ctx: &mut TxContext
+    ctx: &mut TxContext,
 ) {
     let oracle = create_oracle<X, Y>(pool, max_observations, clock, ctx);
     transfer::share_object(oracle);
@@ -114,13 +118,16 @@ public fun update_oracle<X, Y>(
 ) {
     let current_time = iota::clock::timestamp_ms(clock) / 1000;
     let (reserve_x, reserve_y) = get_pool_reserves(pool);
+    // Ensure the provided pool corresponds to this oracle
+    let actual_pool_id = kanari_network::DEX::get_pool_id(pool);
+    assert!(actual_pool_id == oracle.pool_id, E_POOL_MISMATCH);
 
     // Skip if no liquidity (reserves are u128)
     assert!(reserve_x > 0u128 && reserve_y > 0u128, E_INSUFFICIENT_LIQUIDITY);
 
     // Get last observation
     let last_obs = vector::borrow(&oracle.observations, vector::length(&oracle.observations) - 1);
-    
+
     // Skip if no time has passed
     if (current_time <= last_obs.timestamp) {
         return
@@ -172,13 +179,9 @@ public fun update_oracle<X, Y>(
 }
 
 /// Calculate TWAP for a given time window (in seconds)
-public fun get_twap_price<X, Y>(
-    oracle: &PriceOracle<X, Y>,
-    time_window: u64,
-    clock: &Clock,
-): u128 {
+public fun get_twap_price<X, Y>(oracle: &PriceOracle<X, Y>, time_window: u64, clock: &Clock): u128 {
     assert!(time_window > 0, E_INVALID_OBSERVATION);
-    
+
     let obs_count = vector::length(&oracle.observations);
     assert!(obs_count > 1, E_NO_OBSERVATIONS);
 
@@ -217,9 +220,7 @@ public fun get_twap_price<X, Y>(
 }
 
 /// Get current spot price (not TWAP, for reference only)
-public fun get_spot_price<X, Y>(
-    pool: &LiquidityPool<X, Y>,
-): u128 {
+public fun get_spot_price<X, Y>(pool: &LiquidityPool<X, Y>): u128 {
     let (reserve_x, reserve_y) = get_pool_reserves(pool);
     // reserves are u128
     assert!(reserve_x > 0u128 && reserve_y > 0u128, E_INSUFFICIENT_LIQUIDITY);
@@ -308,7 +309,7 @@ public fun get_twap_price_at_time<X, Y>(
     current_timestamp_ms: u64,
 ): u128 {
     assert!(time_window > 0, E_INVALID_OBSERVATION);
-    
+
     let obs_count = vector::length(&oracle.observations);
     assert!(obs_count > 1, E_NO_OBSERVATIONS);
 
@@ -338,10 +339,7 @@ public fun get_twap_price_at_time<X, Y>(
 }
 
 /// Get observation at specific index (for debugging/monitoring)
-public fun get_observation_at_index<X, Y>(
-    oracle: &PriceOracle<X, Y>,
-    index: u64
-): (u64, u128) {
+public fun get_observation_at_index<X, Y>(oracle: &PriceOracle<X, Y>, index: u64): (u64, u128) {
     assert!(index < vector::length(&oracle.observations), E_INVALID_OBSERVATION);
     let obs = vector::borrow(&oracle.observations, index);
     (obs.timestamp, obs.price_cumulative)
