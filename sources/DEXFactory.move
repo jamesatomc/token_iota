@@ -1,8 +1,8 @@
 /// DEX Factory for creating and managing liquidity pools
 module kanari_network::DEXFactory;
 
-use iota::coin;
 use iota::clock::Clock;
+use iota::coin;
 use kanari_network::DEX::{Self, LiquidityPool, LPToken, GlobalPoolRegistry};
 use kanari_network::PriceOracle;
 

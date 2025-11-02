@@ -32,6 +32,7 @@ export default function QuickTrade({
 }: QuickTradeProps) {
   const [side, setSide] = useState<"buy" | "sell">("buy");
   const [quantity, setQuantity] = useState("");
+  const [orderType, setOrderType] = useState<number>(0); // 0=limit,1=IOC,2=FOK,3=PostOnly
   const [loading, setLoading] = useState(false);
 
   const currentAccount = useCurrentAccount();
@@ -131,7 +132,7 @@ export default function QuickTrade({
 
         tx.moveCall({
           target: `${CONTRACTS.PACKAGE_ID}::${MODULES.DEEPBOOK}::${DEEPBOOK_FUNCTIONS.PLACE_BID}`,
-          arguments: [tx.object(bookId), tx.pure.u64(priceU64.toString()), tx.pure.u64(quantityU64.toString()), coinIn],
+          arguments: [tx.object(bookId), tx.pure.u64(priceU64.toString()), tx.pure.u64(quantityU64.toString()), coinIn, tx.pure.u8(orderType)],
           typeArguments: [baseToken, quoteToken],
         });
       } else {
@@ -155,7 +156,7 @@ export default function QuickTrade({
 
         tx.moveCall({
           target: `${CONTRACTS.PACKAGE_ID}::${MODULES.DEEPBOOK}::${DEEPBOOK_FUNCTIONS.PLACE_ASK}`,
-          arguments: [tx.object(bookId), tx.pure.u64(priceU64.toString()), tx.pure.u64(quantityU64.toString()), coinIn],
+          arguments: [tx.object(bookId), tx.pure.u64(priceU64.toString()), tx.pure.u64(quantityU64.toString()), coinIn, tx.pure.u8(orderType)],
           typeArguments: [baseToken, quoteToken],
         });
       }
@@ -192,6 +193,7 @@ export default function QuickTrade({
     bestAskPrice,
     baseDecimals,
     quoteDecimals,
+    orderType,
     client,
     signAndExecute,
   ]);
@@ -225,6 +227,19 @@ export default function QuickTrade({
         >
           🔴 Sell
         </button>
+      </div>
+
+      {/* Order type selector (Limit / IOC / FOK / PostOnly) */}
+      <div className="mb-4">
+        <label className="text-sm text-gray-600">Order Type</label>
+        <div className="mt-2">
+          <select value={orderType} onChange={(e) => setOrderType(Number(e.target.value))} className="w-full px-4 py-3 rounded-xl border border-gray-200 bg-white">
+            <option value={0}>Limit</option>
+            <option value={1}>IOC (Immediate or Cancel)</option>
+            <option value={2}>FOK (Fill or Kill)</option>
+            <option value={3}>PostOnly</option>
+          </select>
+        </div>
       </div>
 
       {/* Price Display */}

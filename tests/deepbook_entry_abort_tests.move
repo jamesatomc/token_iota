@@ -2,6 +2,7 @@
 module kanari_network::deepbook_entry_abort_tests;
 
 use kanari_network::DeepBook;
+
 // use iota::test_scenario;
 
 // Expect placing a bid that would round the required quote to zero to abort with E_INSUFFICIENT_LIQUIDITY

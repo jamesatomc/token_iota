@@ -10,10 +10,10 @@
 
 module kanari_network::deepbook_e2e_tests;
 
-use kanari_network::DeepBook;
-use kanari_network::USDC;
-use kanari_network::KANARI;
 use iota::test_scenario;
+use kanari_network::DeepBook;
+use kanari_network::KANARI;
+use kanari_network::USDC;
 
 // End-to-end integration test template for DeepBook.
 // - Uses the repo's `test_scenario` harness (begin/next_tx/take_shared/return_shared/end)
@@ -43,21 +43,23 @@ fun template_bid_ask_match_full() {
     // Create/get an order book for (KANARI base, USDC quote)
     let _book_addr = DeepBook::get_or_create_order_book_with_decimals<KANARI::KANARI, USDC::USDC>(
         &mut registry,
-        30u64,   // fee bps
-        100u64,  // max depth
-        9u8,     // base_decimals
-        6u8,     // quote_decimals
+        30u64, // fee bps
+        100u64, // max depth
+        9u8, // base_decimals
+        6u8, // quote_decimals
         test_scenario::ctx(&mut scenario),
     );
     test_scenario::next_tx(&mut scenario, owner);
 
     // Bring the book into the scenario for mutation/entry calls
-    let mut book = test_scenario::take_shared<DeepBook::OrderBook<KANARI::KANARI, USDC::USDC>>(&mut scenario);
+    let mut book = test_scenario::take_shared<DeepBook::OrderBook<KANARI::KANARI, USDC::USDC>>(
+        &mut scenario,
+    );
 
     // ---------------------- Prepare tokens / coins ----------------------
     // TODO: mint coins using your token module's test/mint helper and split them
     // to obtain a `Coin<KANARI::KANARI>` for the ask and `Coin<USDC::USDC>` for the bid.
-    
+
     // Place ask/bid steps would go here once minting is available.
 
     test_scenario::return_shared(registry);
@@ -92,7 +94,13 @@ fun template_book_full_eviction_and_refund() {
 
     // Use a small max_depth to keep operations cheap for the test
     let _book_addr = DeepBook::get_or_create_order_book_with_decimals<u128, u64>(
-        &mut registry, 30u64, 3u64, 6u8, 6u8, test_scenario::ctx(&mut scenario));
+        &mut registry,
+        30u64,
+        3u64,
+        6u8,
+        6u8,
+        test_scenario::ctx(&mut scenario),
+    );
     test_scenario::next_tx(&mut scenario, owner);
     let book = test_scenario::take_shared<DeepBook::OrderBook<u128, u64>>(&mut scenario);
 

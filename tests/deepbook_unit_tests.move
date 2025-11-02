@@ -24,7 +24,8 @@ fun test_spread_functions() {
     // Use simple values
     let best_bid: u64 = 100u64;
     let best_ask: u64 = 105u64;
-    let spread = if (best_bid > 0 && best_ask > 0 && best_ask > best_bid) { best_ask - best_bid } else { 0 };
+    let spread = if (best_bid > 0 && best_ask > 0 && best_ask > best_bid) { best_ask - best_bid }
+    else { 0 };
     assert!(spread == 5, 3);
 }
 
@@ -74,7 +75,6 @@ fun test_calculate_quote_and_base_edge_cases() {
     let base2 = DeepBook::calculate_base_amount(quote2, price2);
     assert!(base2 == base_amount2, 10);
 }
-
 
 // NOTE: tests that access module-internal constants or require creating
 // shared objects (OrderBook/GlobalOrderBookRegistry) must be written
@@ -126,6 +126,7 @@ fun test_spread_no_bid_or_ask() {
     // should default to 0 (mirrors defensive patterns used elsewhere)
     let best_bid: u64 = 0u64;
     let best_ask: u64 = 0u64;
-    let spread = if (best_bid > 0 && best_ask > 0 && best_ask > best_bid) { best_ask - best_bid } else { 0 };
+    let spread = if (best_bid > 0 && best_ask > 0 && best_ask > best_bid) { best_ask - best_bid }
+    else { 0 };
     assert!(spread == 0, 16);
 }

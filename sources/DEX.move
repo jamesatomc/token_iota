@@ -3,9 +3,9 @@ module kanari_network::DEX;
 use iota::balance::{Self, Balance};
 use iota::coin::{Self, Coin};
 use iota::event;
+use iota::hash;
 use iota::table::{Self, Table};
 use std::type_name;
-use iota::hash;
 
 // Error codes
 // These error codes are used throughout the module. See usages below for context:
@@ -131,22 +131,18 @@ public fun create_global_registry(ctx: &mut TxContext) {
         id: object::new(ctx),
         pools: table::new(ctx),
     };
-    
+
     let registry_id = object::uid_to_address(&registry.id);
-    
+
     event::emit(RegistryCreated {
         registry_id,
     });
-    
+
     transfer::share_object(registry);
 }
 
 // Create a new liquidity pool
-public fun create_pool<X, Y>(
-    registry: &mut GlobalPoolRegistry,
-    fee_bps: u64,
-    ctx: &mut TxContext
-) {
+public fun create_pool<X, Y>(registry: &mut GlobalPoolRegistry, fee_bps: u64, ctx: &mut TxContext) {
     assert!(fee_bps == FEE_LOW || fee_bps == FEE_MED || fee_bps == FEE_HIGH, E_INVALID_FEE);
 
     // Compute deterministic hash for this type pair (sorted to prevent duplicates)
@@ -155,14 +151,14 @@ public fun create_pool<X, Y>(
 
     // Prevent creating pool with same token types
     assert!(ty_x != ty_y, E_SAME_TOKEN_PAIR);
-    
+
     // Sort type names to ensure IOTA/KANARI and KANARI/IOTA get same hash
     let (first, second) = if (compare_vectors(&ty_x, &ty_y)) {
         (ty_x, ty_y)
     } else {
         (ty_y, ty_x)
     };
-    
+
     let mut concat = first;
     std::vector::append(&mut concat, second);
     let pair_hash = hash::blake2b256(&concat);
@@ -425,7 +421,12 @@ public fun remove_liquidity<X, Y>(
 }
 
 // Helper function for swap calculations with u128 to prevent overflow
-public fun calculate_swap_output(amount_in: u64, balance_in: u64, balance_out: u64, fee_bps: u64): u64 {
+public fun calculate_swap_output(
+    amount_in: u64,
+    balance_in: u64,
+    balance_out: u64,
+    fee_bps: u64,
+): u64 {
     // Quick return for zero input
     if (amount_in == 0) {
         0
@@ -546,7 +547,7 @@ public fun compare_vectors(v1: &vector<u8>, v2: &vector<u8>): bool {
     let len1 = std::vector::length(v1);
     let len2 = std::vector::length(v2);
     let min_len = if (len1 < len2) { len1 } else { len2 };
-    
+
     let mut i = 0;
     while (i < min_len) {
         let b1 = *std::vector::borrow(v1, i);
@@ -558,7 +559,7 @@ public fun compare_vectors(v1: &vector<u8>, v2: &vector<u8>): bool {
         };
         i = i + 1;
     };
-    
+
     // If all bytes equal up to min_len, shorter vector is "less"
     len1 <= len2
 }
@@ -569,18 +570,18 @@ public fun compare_vectors(v1: &vector<u8>, v2: &vector<u8>): bool {
 public fun pool_exists<X, Y>(registry: &GlobalPoolRegistry): bool {
     let ty_x = type_name::get_with_original_ids<X>().into_string().into_bytes();
     let ty_y = type_name::get_with_original_ids<Y>().into_string().into_bytes();
-    
+
     // Sort type names to match create_pool logic
     let (first, second) = if (compare_vectors(&ty_x, &ty_y)) {
         (ty_x, ty_y)
     } else {
         (ty_y, ty_x)
     };
-    
+
     let mut concat = first;
     std::vector::append(&mut concat, second);
     let pair_hash = hash::blake2b256(&concat);
-    
+
     table::contains(&registry.pools, pair_hash)
 }
 
@@ -588,18 +589,18 @@ public fun pool_exists<X, Y>(registry: &GlobalPoolRegistry): bool {
 public fun get_pool_address<X, Y>(registry: &GlobalPoolRegistry): Option<address> {
     let ty_x = type_name::get_with_original_ids<X>().into_string().into_bytes();
     let ty_y = type_name::get_with_original_ids<Y>().into_string().into_bytes();
-    
+
     // Sort type names to match create_pool logic
     let (first, second) = if (compare_vectors(&ty_x, &ty_y)) {
         (ty_x, ty_y)
     } else {
         (ty_y, ty_x)
     };
-    
+
     let mut concat = first;
     std::vector::append(&mut concat, second);
     let pair_hash = hash::blake2b256(&concat);
-    
+
     if (table::contains(&registry.pools, pair_hash)) {
         option::some(*table::borrow(&registry.pools, pair_hash))
     } else {

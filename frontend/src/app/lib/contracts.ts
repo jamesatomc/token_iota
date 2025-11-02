@@ -1,26 +1,26 @@
 // Contract addresses and configuration
 export const CONTRACTS = {
   // Replace with your deployed package ID
-  PACKAGE_ID: "0xc9ed1ab4cae1be9e2757be80ee515cd3d885fd2c1410e3e80dc9bf0d9bcc8c21",
+  PACKAGE_ID: "0x56a20683946c17b80a5260ea8b5eac74c595e0615fe249364f1480dff04cb74f",
   
   // Global Pool Registry ID (create once with create_registry function in DEX)
-  REGISTRY_DEX_ID: "0xa9cda4d05adcf0ce8a4b133d358d1dfca515e05f0fe3db9f540e9b48aa798ca7", // Paste your GlobalPoolRegistry object ID here after calling create_registry
+  REGISTRY_DEX_ID: "0x894d568bef7f6348a51c2594fdbe7b401d9d43f4b32f50379b6b8f7cd4aa1f83", // Paste your GlobalPoolRegistry object ID here after calling create_registry
 
   // Global OrderBook Registry ID (create once with create_global_registry function in DeepBook)
-  REGISTRY_BOOK_ID: "0x9ad85e1f9194bced48b562e1b3fd975a2d6fbdc293780a707aae7b902988196d", // Paste your GlobalOrderBookRegistry object ID here after calling create_global_registry
+  REGISTRY_BOOK_ID: "0x1712f530d8a3b791284a9bc2802e8577126974199f461bea58219cbff1ca993c", // Paste your GlobalOrderBookRegistry object ID here after calling create_global_registry
 
   // KANARI Token
   KANARI: {
-    TREASURY_CAP: "0xfc9ad054815c1a1390535308ce5fcbc8300cd9588f3b8d1863732110e8c3f5d0",
-    METADATA: "0x77e68e023ba7faa7bc49a8e494bb549b004fd1b9f8677966b2ebf71b4ee77558",
-    TYPE: "0xc9ed1ab4cae1be9e2757be80ee515cd3d885fd2c1410e3e80dc9bf0d9bcc8c21::KANARI::KANARI",
+    TREASURY_CAP: "0xade03531fb4f969da74f6ed3d2008d4db6f1e1677930f066abcaf4d5a4d3d28c",
+    METADATA: "0x9ff3d7efc1ad6b5d5f622e43dc5111bc8458e11af23d963f01a05438e3ab84d8",
+    TYPE: "0x56a20683946c17b80a5260ea8b5eac74c595e0615fe249364f1480dff04cb74f::KANARI::KANARI",
   },
 
     // KANARI Token
   USDC: {
-    TREASURY_CAP: "0x3a3fcde956f957c3f8eb4faf6ed78db2718e4794e04bff3346cbef5d0534c7f3",
-    METADATA: "0x510bb006b8244d25d0404b24dd09c9a76dae97117712a77b74ea95950ac158ef",
-    TYPE: "0xc9ed1ab4cae1be9e2757be80ee515cd3d885fd2c1410e3e80dc9bf0d9bcc8c21::USDC::USDC",
+    TREASURY_CAP: "0xf32c14f7ab0a55c4ae5a11c084aa74dcb78d20a2d58c8b833ac2e74162201c6a",
+    METADATA: "0xb160c595c672a5e00ad5451b66e02485a4e1f31a2ee1f0477192c83bfdf6484a",
+    TYPE: "0x56a20683946c17b80a5260ea8b5eac74c595e0615fe249364f1480dff04cb74f::USDC::USDC",
   },
   
   

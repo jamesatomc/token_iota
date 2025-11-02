@@ -3,16 +3,15 @@
 // to avoid CI failures. To enable as a runnable test, fill the TODOs below
 // and remove the 'template_' prefix and uncomment the #[test] attribute.
 
-
 #[test_only]
 #[allow(unused_use)]
 module kanari_network::deepbook_e2e_dev_test;
 
-use kanari_network::DeepBook;
-use kanari_network::USDC;
-use kanari_network::KANARI;
-use iota::test_scenario;
 use iota::coin;
+use iota::test_scenario;
+use kanari_network::DeepBook;
+use kanari_network::KANARI;
+use kanari_network::USDC;
 
 // Developer workflow:
 // 1) Run the local devnode or a testnet where you control an account that has
@@ -47,7 +46,9 @@ fun template_test_bid_ask_match_full_with_mint() {
         test_scenario::ctx(&mut scenario),
     );
     test_scenario::next_tx(&mut scenario, owner);
-    let mut book = test_scenario::take_shared<DeepBook::OrderBook<KANARI::KANARI, USDC::USDC>>(&mut scenario);
+    let mut book = test_scenario::take_shared<DeepBook::OrderBook<KANARI::KANARI, USDC::USDC>>(
+        &mut scenario,
+    );
 
     // ---------------------- TODO: Obtain TreasuryCaps ----------------------
     // You must obtain mutable references to the TreasuryCap objects for each

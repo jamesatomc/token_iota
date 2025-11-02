@@ -1,8 +1,8 @@
 #[test_only]
 module kanari_network::withdraw_fees_tests;
 
-use kanari_network::DeepBook;
 use iota::test_scenario;
+use kanari_network::DeepBook;
 
 // We'll use a scenario-based harness to create transactions and take shared objects
 // from the global inventory. This avoids needing `object::borrow_global_mut` which
@@ -30,7 +30,14 @@ fun test_registry_admin_and_withdraw_zero() {
     let mut registry = test_scenario::take_shared<DeepBook::GlobalOrderBookRegistry>(&mut scenario);
 
     // Create or get a new book for the pair; the creator (owner) becomes admin in the registry
-    let book_addr = DeepBook::get_or_create_order_book_with_decimals<u128, u64>(&mut registry, 30u64, 100u64, 6u8, 6u8, test_scenario::ctx(&mut scenario));
+    let book_addr = DeepBook::get_or_create_order_book_with_decimals<u128, u64>(
+        &mut registry,
+        30u64,
+        100u64,
+        6u8,
+        6u8,
+        test_scenario::ctx(&mut scenario),
+    );
     // end tx so the shared book becomes available
     test_scenario::next_tx(&mut scenario, owner);
 
@@ -46,7 +53,14 @@ fun test_registry_admin_and_withdraw_zero() {
     let mut book = test_scenario::take_shared<DeepBook::OrderBook<u128, u64>>(&mut scenario);
 
     // Withdraw zero amounts (should succeed and emit FeesWithdrawn) — serves as a smoke test
-    DeepBook::withdraw_fees(&mut registry, &mut book, test_scenario::ctx(&mut scenario).sender(), 0u64, 0u64, test_scenario::ctx(&mut scenario));
+    DeepBook::withdraw_fees(
+        &mut registry,
+        &mut book,
+        test_scenario::ctx(&mut scenario).sender(),
+        0u64,
+        0u64,
+        test_scenario::ctx(&mut scenario),
+    );
 
     // Return shared objects to the global inventory and end the scenario to consume `scenario`
     test_scenario::return_shared(registry);

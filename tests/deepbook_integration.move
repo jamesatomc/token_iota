@@ -4,11 +4,11 @@
 #[allow(unused_mut_ref)]
 module kanari_network::deepbook_integration_tests;
 
+use iota::coin;
+use iota::test_scenario;
 use kanari_network::DeepBook;
 use kanari_network::KANARI;
 use kanari_network::USDC;
-use iota::test_scenario;
-use iota::coin;
 
 #[test]
 fun test_full_match_and_withdraw_fees() {
@@ -32,21 +32,43 @@ fun test_full_match_and_withdraw_fees() {
     );
     test_scenario::next_tx(&mut scenario, owner);
 
-    let mut book = test_scenario::take_shared<DeepBook::OrderBook<KANARI::KANARI, USDC::USDC>>(&mut scenario);
+    let mut book = test_scenario::take_shared<DeepBook::OrderBook<KANARI::KANARI, USDC::USDC>>(
+        &mut scenario,
+    );
 
     // Maker places an ask: sell 100 base at price = 2.0 (2 quote per base)
     // Use larger quantities to avoid decimal rounding-to-zero when base/quote decimals differ
     let quantity: u64 = 1000000000u64; // 1e9
     let price: u64 = 2_000_000_000u64; // PRICE_SCALE == 1e9 -> 2.0
 
-    let base_coin = coin::mint_for_testing<KANARI::KANARI>(quantity, test_scenario::ctx(&mut scenario));
-    DeepBook::place_ask(&mut book, price, quantity, base_coin, test_scenario::ctx(&mut scenario));
+    let base_coin = coin::mint_for_testing<KANARI::KANARI>(
+        quantity,
+        test_scenario::ctx(&mut scenario),
+    );
+    DeepBook::place_ask(
+        &mut book,
+        price,
+        quantity,
+        base_coin,
+        0u8,
+        test_scenario::ctx(&mut scenario),
+    );
 
     // Taker prepares exact quote payment and places a bid that fully fills the ask
     let required_quote = DeepBook::calculate_quote_amount_with_decimals(quantity, price, 9u8, 6u8);
-    let quote_coin = coin::mint_for_testing<USDC::USDC>(required_quote, test_scenario::ctx(&mut scenario));
+    let quote_coin = coin::mint_for_testing<USDC::USDC>(
+        required_quote,
+        test_scenario::ctx(&mut scenario),
+    );
 
-    DeepBook::place_bid(&mut book, price, quantity, quote_coin, test_scenario::ctx(&mut scenario));
+    DeepBook::place_bid(
+        &mut book,
+        price,
+        quantity,
+        quote_coin,
+        0u8,
+        test_scenario::ctx(&mut scenario),
+    );
 
     // After matching, fees should have been collected in quote balance
     let (fee_base, fee_quote) = DeepBook::get_fee_balances(&book);
@@ -56,7 +78,14 @@ fun test_full_match_and_withdraw_fees() {
 
     // Withdraw fees as admin to taker
     // withdraw_fees requires caller to be admin; the creator is admin by default
-    DeepBook::withdraw_fees(&mut registry, &mut book, taker, 0u64, fee_quote, test_scenario::ctx(&mut scenario));
+    DeepBook::withdraw_fees(
+        &mut registry,
+        &mut book,
+        taker,
+        0u64,
+        fee_quote,
+        test_scenario::ctx(&mut scenario),
+    );
 
     // After withdraw, fee balance should be zero for quote
     let (_fee_base_after, fee_quote_after) = DeepBook::get_fee_balances(&book);
@@ -86,7 +115,9 @@ fun test_eviction_and_depth_limits() {
         test_scenario::ctx(&mut scenario),
     );
     test_scenario::next_tx(&mut scenario, owner);
-    let mut book = test_scenario::take_shared<DeepBook::OrderBook<KANARI::KANARI, USDC::USDC>>(&mut scenario);
+    let mut book = test_scenario::take_shared<DeepBook::OrderBook<KANARI::KANARI, USDC::USDC>>(
+        &mut scenario,
+    );
 
     // Place 3 bids to fill depth (resting orders)
     let price1 = 1_500_000_000u64; // 1.5
@@ -100,19 +131,26 @@ fun test_eviction_and_depth_limits() {
     let q3 = DeepBook::calculate_quote_amount_with_decimals(qty, price3, 9u8, 6u8);
 
     let coin_q1 = coin::mint_for_testing<USDC::USDC>(q1, test_scenario::ctx(&mut scenario));
-    DeepBook::place_bid(&mut book, price1, qty, coin_q1, test_scenario::ctx(&mut scenario));
+    DeepBook::place_bid(&mut book, price1, qty, coin_q1, 0u8, test_scenario::ctx(&mut scenario));
 
     let coin_q2 = coin::mint_for_testing<USDC::USDC>(q2, test_scenario::ctx(&mut scenario));
-    DeepBook::place_bid(&mut book, price2, qty, coin_q2, test_scenario::ctx(&mut scenario));
+    DeepBook::place_bid(&mut book, price2, qty, coin_q2, 0u8, test_scenario::ctx(&mut scenario));
 
     let coin_q3 = coin::mint_for_testing<USDC::USDC>(q3, test_scenario::ctx(&mut scenario));
-    DeepBook::place_bid(&mut book, price3, qty, coin_q3, test_scenario::ctx(&mut scenario));
+    DeepBook::place_bid(&mut book, price3, qty, coin_q3, 0u8, test_scenario::ctx(&mut scenario));
 
     // Now place a new lower-priority bid that should cause eviction of the worst (lowest) bid
     let price_new = 1_450_000_000u64; // sits between price1 and price2
     let q_new = DeepBook::calculate_quote_amount_with_decimals(qty, price_new, 9u8, 6u8);
     let coin_qnew = coin::mint_for_testing<USDC::USDC>(q_new, test_scenario::ctx(&mut scenario));
-    DeepBook::place_bid(&mut book, price_new, qty, coin_qnew, test_scenario::ctx(&mut scenario));
+    DeepBook::place_bid(
+        &mut book,
+        price_new,
+        qty,
+        coin_qnew,
+        0u8,
+        test_scenario::ctx(&mut scenario),
+    );
 
     // After insertion, number of bids should remain equal to max_depth (3)
     let bids_count = DeepBook::get_bid_count(&book);

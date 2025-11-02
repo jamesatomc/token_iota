@@ -13,7 +13,7 @@ import PriceChart from "./PriceChart";
 
 export default function DeepBookInterface() {
   const [feeBps] = useState(10);
-  const [maxDepth] = useState(10000);
+  const [maxDepth] = useState(1000);
   const [loadingCreate, setLoadingCreate] = useState(false);
 
   const [bookId, setBookId] = useState("");
@@ -26,6 +26,7 @@ export default function DeepBookInterface() {
   const [baseBalance, setBaseBalance] = useState<bigint | null>(null);
   const [quoteBalance, setQuoteBalance] = useState<bigint | null>(null);
   const [side, setSide] = useState<"bid" | "ask">("bid");
+  const [orderType, setOrderType] = useState<number>(0); // 0=limit,1=IOC,2=FOK,3=PostOnly
   // price: allow human decimal input and normalized u64. The UI shows both.
   const [humanPrice, setHumanPrice] = useState("");
   const [price, setPrice] = useState(""); // normalized u64 string
@@ -792,7 +793,7 @@ export default function DeepBookInterface() {
         // Move signature: place_bid(book: &mut OrderBook<Base,Quote>, price: u64, quantity: u64, payment: Coin<Quote>, ctx: &mut TxContext)
         const callSpec = {
           target: `${CONTRACTS.PACKAGE_ID}::${MODULES.DEEPBOOK}::${DEEPBOOK_FUNCTIONS.PLACE_BID}`,
-          arguments: [tx.object(bookId), tx.pure.u64(priceU64.toString()), tx.pure.u64(quantityU64.toString()), coinIn],
+          arguments: [tx.object(bookId), tx.pure.u64(priceU64.toString()), tx.pure.u64(quantityU64.toString()), coinIn, tx.pure.u8(orderType)],
           typeArguments: [baseToken, quoteToken],
         } as Parameters<typeof tx.moveCall>[0];
         console.debug("DeepBook - placeBid payload:", callSpec);
@@ -822,7 +823,7 @@ export default function DeepBookInterface() {
         // Move signature: place_ask(book: &mut OrderBook<Base,Quote>, price: u64, quantity: u64, base_coin: Coin<Base>, ctx: &mut TxContext)
         const callSpec = {
           target: `${CONTRACTS.PACKAGE_ID}::${MODULES.DEEPBOOK}::${DEEPBOOK_FUNCTIONS.PLACE_ASK}`,
-          arguments: [tx.object(bookId), tx.pure.u64(priceU64.toString()), tx.pure.u64(quantityU64.toString()), coinIn],
+          arguments: [tx.object(bookId), tx.pure.u64(priceU64.toString()), tx.pure.u64(quantityU64.toString()), coinIn, tx.pure.u8(orderType)],
           typeArguments: [baseToken, quoteToken],
         } as Parameters<typeof tx.moveCall>[0];
         console.debug("DeepBook - placeAsk payload:", callSpec);
@@ -868,7 +869,7 @@ export default function DeepBookInterface() {
     } finally {
       setLoadingOrder(false);
     }
-  }, [signAndExecute, client, currentAccount, bookId, baseToken, quoteToken, price, quantity, side, humanPrice]);
+  }, [signAndExecute, client, currentAccount, bookId, baseToken, quoteToken, price, quantity, side, humanPrice, orderType]);
 
   return (
     <div className="min-h-[420px] w-full max-w-6xl mx-auto px-2 sm:px-4">
@@ -1136,6 +1137,16 @@ export default function DeepBookInterface() {
               <option value="bid">Bid (buy)</option>
               <option value="ask">Ask (sell)</option>
             </select>
+
+            <div className="mt-3">
+              <label className="text-sm text-gray-600">Order Type</label>
+              <select value={orderType} onChange={(e) => setOrderType(Number(e.target.value))} className="mt-2 w-full px-4 py-3 rounded-xl border border-gray-200 bg-white">
+                <option value={0}>Limit</option>
+                <option value={1}>IOC (Immediate or Cancel)</option>
+                <option value={2}>FOK (Fill or Kill)</option>
+                <option value={3}>PostOnly</option>
+              </select>
+            </div>
           </div>
         </div>
 

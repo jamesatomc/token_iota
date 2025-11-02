@@ -6,6 +6,13 @@ import { useCurrentAccount, useIotaClient, useSignAndExecuteTransaction } from "
 import { formatAmount as rawFormatAmount, CONTRACTS, MODULES, DEX_FUNCTIONS, computeActiveLpSupply } from "../lib/contracts";
 import Card from "./UI/Card";
 
+// small helper type for SDKs that expose read-only helpers
+type ReadOnlyClient = {
+  callReadOnly?: (args: unknown) => Promise<unknown>;
+  readMove?: (args: unknown) => Promise<unknown>;
+  devInspect?: (args: unknown) => Promise<unknown>;
+};
+
 interface PoolData {
   balance_x: string;
   balance_y: string;
@@ -171,21 +178,21 @@ export default function PoolInfo() {
         if (burnAddr) {
           // Prefer a read-only Move call if the SDK/client supports it. If not available
           // or it fails, fall back to fetching the burn object via getObject (existing behavior).
-          const cliAny = client as any;
+          const cli = client as unknown as ReadOnlyClient;
           let usedFallback = false;
           try {
-            let readRes: any = null;
+            let readRes: unknown = null;
             // Try common SDK method names (callReadOnly / readMove) with a safe payload
-            if (cliAny && typeof cliAny.callReadOnly === "function") {
-              readRes = await cliAny.callReadOnly({
+            if (cli && typeof cli.callReadOnly === "function") {
+              readRes = await cli.callReadOnly({
                 package: CONTRACTS.PACKAGE_ID,
                 module: MODULES.DEX,
                 function: DEX_FUNCTIONS.GET_BURN_RESERVE,
                 arguments: [burnAddr],
                 typeArguments: [],
               });
-            } else if (cliAny && typeof cliAny.readMove === "function") {
-              readRes = await cliAny.readMove({
+            } else if (cli && typeof cli.readMove === "function") {
+              readRes = await cli.readMove({
                 package: CONTRACTS.PACKAGE_ID,
                 module: MODULES.DEX,
                 function: DEX_FUNCTIONS.GET_BURN_RESERVE,
@@ -200,11 +207,12 @@ export default function PoolInfo() {
                 burnedAmountStr = String(readRes);
               } else if (Array.isArray(readRes) && readRes.length > 0) {
                 burnedAmountStr = String(readRes[0]);
-              } else if (typeof readRes === "object") {
+              } else if (typeof readRes === "object" && readRes !== null) {
+                const obj = readRes as Record<string, unknown>;
                 // Common wrappers: { result: <val> } or { value: <val> }
-                if (readRes.result != null) burnedAmountStr = String(readRes.result);
-                else if (readRes.value != null) burnedAmountStr = String(readRes.value);
-                else if (readRes.Ok != null) burnedAmountStr = String(readRes.Ok);
+                if (obj.result != null) burnedAmountStr = String(obj.result);
+                else if (obj.value != null) burnedAmountStr = String(obj.value);
+                else if (obj.Ok != null) burnedAmountStr = String(obj.Ok);
               }
             } else {
               usedFallback = true;
@@ -269,31 +277,31 @@ export default function PoolInfo() {
 
     setLoading(true);
     try {
-      const cliAny = client as any;
-      let readRes: any = null;
+      const cli = client as unknown as ReadOnlyClient;
+      let readRes: unknown = null;
       const registryId = CONTRACTS.REGISTRY_DEX_ID;
 
       // Try common SDK read-only helpers (callReadOnly / readMove / devInspect)
-      if (cliAny && typeof cliAny.callReadOnly === "function") {
-        readRes = await cliAny.callReadOnly({
+      if (cli && typeof cli.callReadOnly === "function") {
+        readRes = await cli.callReadOnly({
           package: CONTRACTS.PACKAGE_ID,
           module: MODULES.DEX_FACTORY,
           function: DEX_FUNCTIONS.GET_POOL_ADDRESS,
           arguments: [registryId],
           typeArguments: [tx, ty],
         });
-      } else if (cliAny && typeof cliAny.readMove === "function") {
-        readRes = await cliAny.readMove({
+      } else if (cli && typeof cli.readMove === "function") {
+        readRes = await cli.readMove({
           package: CONTRACTS.PACKAGE_ID,
           module: MODULES.DEX_FACTORY,
           function: DEX_FUNCTIONS.GET_POOL_ADDRESS,
           arguments: [registryId],
           typeArguments: [tx, ty],
         });
-      } else if (cliAny && typeof cliAny.devInspect === "function") {
+      } else if (cli && typeof cli.devInspect === "function") {
         // devInspect may return a complex object; attempt to call it as a last resort
         try {
-          const inspect = await cliAny.devInspect({
+          const inspect = await cli.devInspect({
             sender: currentAccount?.address ?? "0x0",
             package: CONTRACTS.PACKAGE_ID,
             module: MODULES.DEX_FACTORY,

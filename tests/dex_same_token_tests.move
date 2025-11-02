@@ -1,8 +1,8 @@
 #[test_only]
 module kanari_network::dex_same_token_tests;
 
-use kanari_network::DEX;
 use iota::test_scenario;
+use kanari_network::DEX;
 
 // We expect creating a pool with identical token types to abort with E_SAME_TOKEN_PAIR
 #[allow(unused_mut_ref)]

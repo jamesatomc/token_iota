@@ -4,7 +4,13 @@ import { useEffect, useState, useCallback } from "react";
 import { useSignAndExecuteTransaction, useCurrentAccount, useIotaClient } from "@iota/dapp-kit";
 import { Transaction } from "@iota/iota-sdk/transactions";
 import Card from "../UI/Card";
-import { CONTRACTS, MODULES, DEFAULT_TOKENS, parseAmount } from "../../lib/contracts";
+import { CONTRACTS, MODULES, DEFAULT_TOKENS, parseAmount, formatAmount } from "../../lib/contracts";
+
+type ReadOnlyClient = {
+  callReadOnly?: (args: unknown) => Promise<unknown>;
+  readMove?: (args: unknown) => Promise<unknown>;
+  devInspect?: (args: unknown) => Promise<unknown>;
+};
 
 type RegisteredPair = {
   bookId: string;
@@ -27,6 +33,7 @@ export default function AdminDeepBookInterface() {
   const [registeredPairs, setRegisteredPairs] = useState<RegisteredPair[]>([]);
   const [loadingPairs, setLoadingPairs] = useState(false);
   const [selectedBook, setSelectedBook] = useState<string>("");
+  const [feeBalances, setFeeBalances] = useState<{ base?: string; quote?: string } | null>(null);
 
   const [newAdmin, setNewAdmin] = useState("");
   const [withdrawTo, setWithdrawTo] = useState("");
@@ -46,15 +53,18 @@ export default function AdminDeepBookInterface() {
         // attempt to find the inner books table id (same approach as DeepBookInterface)
         let booksTableId: string | null = null;
         if (registryObjInfo?.data?.content && "fields" in registryObjInfo.data.content) {
-          const registryFields = registryObjInfo.data.content.fields as unknown as Record<string, unknown>;
-          if (registryFields.books) {
+          const registryFields = (registryObjInfo.data.content as unknown as Record<string, unknown>).fields as Record<string, unknown> | undefined;
+          if (registryFields && registryFields.books) {
             try {
-              const bfUnknown = registryFields.books as any;
-              const fieldsObj = bfUnknown.fields as Record<string, unknown> | undefined;
+              const bfUnknown = registryFields.books as unknown;
+              const fieldsObj = (bfUnknown && typeof bfUnknown === "object" && "fields" in bfUnknown) ? ((bfUnknown as Record<string, unknown>).fields as Record<string, unknown> | undefined) : undefined;
               if (fieldsObj) {
                 const idObj = fieldsObj.id as unknown;
                 if (typeof idObj === "string") booksTableId = idObj;
-                else if (typeof idObj === "object" && idObj !== null) booksTableId = (idObj as any).id as string | undefined || null;
+                else if (typeof idObj === "object" && idObj !== null) {
+                  const idProp = (idObj as Record<string, unknown>).id;
+                  if (typeof idProp === "string") booksTableId = idProp;
+                }
               }
             } catch {
               // ignore
@@ -77,8 +87,9 @@ export default function AdminDeepBookInterface() {
             const fieldObj = await client.getDynamicFieldObject({ parentId, name: field.name });
             let bookAddress: string | null = null;
             if (fieldObj?.data?.content && "fields" in fieldObj.data.content) {
-              const fields = fieldObj.data.content.fields as unknown as Record<string, unknown>;
-              bookAddress = (fields.value as string) || (fields.book_id as string) || (fields.id as string) || null;
+              const fields = (fieldObj.data.content as unknown as Record<string, unknown>).fields as Record<string, unknown> | undefined;
+              const maybe = (fields?.value ?? fields?.book_id ?? fields?.id) as unknown;
+              if (typeof maybe === "string") bookAddress = maybe;
             } else if (fieldObj?.data?.objectId) {
               bookAddress = fieldObj.data.objectId;
             } else if (field.objectId) {
@@ -123,6 +134,94 @@ export default function AdminDeepBookInterface() {
     };
   }, [client]);
 
+  // Fetch fee balances for the selected book so UI can show collected fees
+  useEffect(() => {
+    let mounted = true;
+    const fetchFees = async (bookId: string) => {
+      if (!bookId) {
+        if (mounted) setFeeBalances(null);
+        return;
+      }
+
+      try {
+        const bookObj = await client.getObject({ id: bookId, options: { showContent: true, showType: true } });
+        if (!bookObj?.data?.content) {
+          if (mounted) setFeeBalances(null);
+          return;
+        }
+
+        let fields: Record<string, unknown> | undefined = undefined;
+        if (bookObj.data.content && "fields" in bookObj.data.content) {
+          fields = (bookObj.data.content as unknown as Record<string, unknown>).fields as Record<string, unknown> | undefined;
+        }
+
+        const extract = (raw: unknown): string | null => {
+          if (raw == null) return null;
+          if (typeof raw === "string" || typeof raw === "number") return String(raw);
+          if (typeof raw === "object") {
+            const o = raw as Record<string, unknown>;
+            if (typeof o.value === "string" || typeof o.value === "number") return String(o.value);
+            if (typeof o.amount === "string" || typeof o.amount === "number") return String(o.amount);
+            if (o.value && typeof o.value === "object") {
+              const inner = o.value as Record<string, unknown>;
+              if (typeof inner.value === "string" || typeof inner.value === "number") return String(inner.value);
+              if (typeof inner.amount === "string" || typeof inner.amount === "number") return String(inner.amount);
+            }
+            const keys = Object.keys(o);
+            if (keys.length === 1) {
+              const v = o[keys[0]];
+              if (typeof v === "string" || typeof v === "number") return String(v);
+            }
+          }
+          return null;
+        };
+
+        let baseRaw: string | null = null;
+        let quoteRaw: string | null = null;
+
+        if (fields) {
+          baseRaw = extract(fields.fee_balance_base ?? fields.feeBalanceBase ?? fields.fee_base ?? fields.base_fee);
+          quoteRaw = extract(fields.fee_balance_quote ?? fields.feeBalanceQuote ?? fields.fee_quote ?? fields.quote_fee);
+        }
+
+        // fallback: try read-only wrapper if available
+        try {
+          const cli = client as unknown as ReadOnlyClient;
+          if ((baseRaw == null || quoteRaw == null) && cli && typeof cli.callReadOnly === "function") {
+            const readRes = await cli.callReadOnly({
+              package: CONTRACTS.PACKAGE_ID,
+              module: MODULES.DEEPBOOK,
+              function: "get_fee_balances",
+              arguments: [bookId],
+              typeArguments: [],
+            });
+            if (Array.isArray(readRes) && readRes.length >= 2) {
+              baseRaw = baseRaw ?? String(readRes[0]);
+              quoteRaw = quoteRaw ?? String(readRes[1]);
+            } else if (readRes && typeof readRes === "object") {
+              const rr = readRes as Record<string, unknown>;
+              const maybe = rr.result ?? rr.value ?? rr.Ok ?? rr;
+              if (Array.isArray(maybe) && maybe.length >= 2) {
+                baseRaw = baseRaw ?? String(maybe[0]);
+                quoteRaw = quoteRaw ?? String(maybe[1]);
+              }
+            }
+          }
+        } catch {
+          // ignore read-only failure
+        }
+
+        if (mounted) setFeeBalances({ base: baseRaw ?? undefined, quote: quoteRaw ?? undefined });
+      } catch (err) {
+        console.warn("Failed to fetch book fees:", err);
+        if (mounted) setFeeBalances(null);
+      }
+    };
+
+    fetchFees(selectedBook);
+    return () => { mounted = false; };
+  }, [selectedBook, client]);
+
   const handleSetAdmin = useCallback(async () => {
     if (!currentAccount) return alert("Connect wallet to set admin");
     if (!selectedBook) return alert("Select a book first");
@@ -137,7 +236,7 @@ export default function AdminDeepBookInterface() {
         arguments: [tx.object(registryId), tx.pure.address(selectedBook), tx.pure.address(newAdmin)],
       });
 
-      signAndExecute({ transaction: tx }, { onSuccess: (r) => { alert("Set admin transaction submitted"); }, onError: (e) => { alert(`Failed: ${String(e)}`); } });
+      signAndExecute({ transaction: tx }, { onSuccess: () => { alert("Set admin transaction submitted"); }, onError: (e) => { alert(`Failed: ${String(e)}`); } });
     } catch (err) {
       console.error(err);
       alert(`Error preparing tx: ${String(err)}`);
@@ -172,7 +271,7 @@ export default function AdminDeepBookInterface() {
         typeArguments: [pair.baseToken, pair.quoteToken],
       });
 
-      signAndExecute({ transaction: tx }, { onSuccess: (r) => { alert("Withdraw transaction submitted"); }, onError: (e) => { alert(`Failed: ${String(e)}`); } });
+      signAndExecute({ transaction: tx }, { onSuccess: () => { alert("Withdraw transaction submitted"); }, onError: (e) => { alert(`Failed: ${String(e)}`); } });
     } catch (err) {
       console.error(err);
       alert(`Error preparing tx: ${String(err)}`);
@@ -181,11 +280,41 @@ export default function AdminDeepBookInterface() {
     }
   }, [currentAccount, selectedBook, withdrawTo, withdrawBaseAmount, withdrawQuoteAmount, registeredPairs, signAndExecute]);
 
+  // UI helpers for displaying collected fees
+  const selectedPair = registeredPairs.find((p) => p.bookId === selectedBook);
+  const baseSymbol = selectedPair?.baseSymbol ?? "BASE";
+  const quoteSymbol = selectedPair?.quoteSymbol ?? "QUOTE";
+  const baseDisplay = feeBalances?.base
+    ? (() => {
+      try {
+        return selectedPair ? formatAmount(BigInt(feeBalances.base as string), getDecimals(selectedPair.baseToken)) : String(feeBalances.base);
+      } catch {
+        return String(feeBalances.base);
+      }
+    })()
+    : "0";
+  const quoteDisplay = feeBalances?.quote
+    ? (() => {
+      try {
+        return selectedPair ? formatAmount(BigInt(feeBalances.quote as string), getDecimals(selectedPair.quoteToken)) : String(feeBalances.quote);
+      } catch {
+        return String(feeBalances.quote);
+      }
+    })()
+    : "0";
+
   return (
     <Card>
       <h3 className="mb-2">DeepBook Admin Panel</h3>
       <div className="mb-3">
         <label className="block text-sm font-medium">Select Order Book</label>
+        <div className="text-xs text-gray-600 mb-1">
+          {loadingPairs ? (
+            <span>Loading registered books...</span>
+          ) : (
+            <span>{registeredPairs.length} registered book(s)</span>
+          )}
+        </div>
         <select className="w-full p-2 border" value={selectedBook} onChange={(e) => setSelectedBook(e.target.value)}>
           <option value="">-- Select a registered book --</option>
           {registeredPairs.map((p) => (
@@ -202,6 +331,9 @@ export default function AdminDeepBookInterface() {
 
       <div>
         <h4 className="font-medium">Withdraw Collected Fees (book admin)</h4>
+        <div className="text-sm text-gray-700 mt-2 mb-2">
+          Collected fees: <span className="font-mono">{baseSymbol} {baseDisplay}</span> • <span className="font-mono">{quoteSymbol} {quoteDisplay}</span>
+        </div>
         <input className="w-full p-2 border mt-2" placeholder="Destination address (0x...)" value={withdrawTo} onChange={(e) => setWithdrawTo(e.target.value)} />
         <div className="flex gap-2 mt-2">
           <input className="flex-1 p-2 border" placeholder="Base amount (human, e.g. 0.1)" value={withdrawBaseAmount} onChange={(e) => setWithdrawBaseAmount(e.target.value)} />

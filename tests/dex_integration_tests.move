@@ -5,10 +5,10 @@
 #[allow(unused_mut_ref, duplicate_alias)]
 module kanari_network::dex_integration_tests;
 
-use kanari_network::DEX;
-use iota::test_scenario;
 use iota::coin;
+use iota::test_scenario;
 use iota::transfer;
+use kanari_network::DEX;
 
 // Two distinct test token types for the pool
 public struct TOKEN_A has drop {}
@@ -35,7 +35,13 @@ fun test_add_swap_remove_flow() {
     let coin_x = coin::mint_for_testing<TOKEN_A>(1_000u64, test_scenario::ctx(&mut scenario));
     let coin_y = coin::mint_for_testing<TOKEN_B>(1_000u64, test_scenario::ctx(&mut scenario));
 
-    let lp_token = DEX::add_liquidity(&mut pool, coin_x, coin_y, 0u64, test_scenario::ctx(&mut scenario));
+    let lp_token = DEX::add_liquidity(
+        &mut pool,
+        coin_x,
+        coin_y,
+        0u64,
+        test_scenario::ctx(&mut scenario),
+    );
 
     // Burn reserve should be present and equal to the module constant
     let burned = DEX::get_burned_minimum_liquidity(&pool);
@@ -62,7 +68,13 @@ fun test_add_swap_remove_flow() {
     assert!(res_y_after == res_y_before - expected_out, 1004);
 
     // Remove liquidity (burn LP token) and ensure returned coins are non-zero
-    let (ret_x, ret_y) = DEX::remove_liquidity(&mut pool, lp_token, 0u64, 0u64, test_scenario::ctx(&mut scenario));
+    let (ret_x, ret_y) = DEX::remove_liquidity(
+        &mut pool,
+        lp_token,
+        0u64,
+        0u64,
+        test_scenario::ctx(&mut scenario),
+    );
     assert!(coin::value(&ret_x) > 0 && coin::value(&ret_y) > 0, 1005);
 
     // Transfer returned coins to owner (consume them)
