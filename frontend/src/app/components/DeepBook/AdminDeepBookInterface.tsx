@@ -305,7 +305,7 @@ export default function AdminDeepBookInterface() {
 
   return (
     <Card>
-      <h3 className="mb-2">DeepBook Admin Panel</h3>
+      <h3 className="mb-2 text-lg md:text-xl">DeepBook Admin Panel</h3>
       <div className="mb-3">
         <label className="block text-sm font-medium">Select Order Book</label>
         <div className="text-xs text-gray-600 mb-1">
@@ -315,7 +315,7 @@ export default function AdminDeepBookInterface() {
             <span>{registeredPairs.length} registered book(s)</span>
           )}
         </div>
-        <select className="w-full p-2 border" value={selectedBook} onChange={(e) => setSelectedBook(e.target.value)}>
+        <select className="w-full p-2 border rounded-md" value={selectedBook} onChange={(e) => setSelectedBook(e.target.value)}>
           <option value="">-- Select a registered book --</option>
           {registeredPairs.map((p) => (
             <option key={p.bookId} value={p.bookId}>{`${p.baseSymbol}/${p.quoteSymbol} — ${p.bookId}`}</option>
@@ -325,8 +325,8 @@ export default function AdminDeepBookInterface() {
 
       <div className="mb-4">
         <h4 className="font-medium">Set Book Admin (registry owner only)</h4>
-        <input className="w-full p-2 border mt-2" placeholder="New admin address (0x...)" value={newAdmin} onChange={(e) => setNewAdmin(e.target.value)} />
-        <button disabled={busy} className="mt-2 px-4 py-2 bg-blue-600 text-white" onClick={handleSetAdmin}>Set Admin</button>
+        <input className="w-full p-2 border rounded-md mt-2" placeholder="New admin address (0x...)" value={newAdmin} onChange={(e) => setNewAdmin(e.target.value)} />
+        <button disabled={busy} className="mt-2 px-4 py-2 bg-blue-600 text-white w-full md:w-auto rounded-md" onClick={handleSetAdmin}>Set Admin</button>
       </div>
 
       <div>
@@ -334,12 +334,12 @@ export default function AdminDeepBookInterface() {
         <div className="text-sm text-gray-700 mt-2 mb-2">
           Collected fees: <span className="font-mono">{baseSymbol} {baseDisplay}</span> • <span className="font-mono">{quoteSymbol} {quoteDisplay}</span>
         </div>
-        <input className="w-full p-2 border mt-2" placeholder="Destination address (0x...)" value={withdrawTo} onChange={(e) => setWithdrawTo(e.target.value)} />
-        <div className="flex gap-2 mt-2">
-          <input className="flex-1 p-2 border" placeholder="Base amount (human, e.g. 0.1)" value={withdrawBaseAmount} onChange={(e) => setWithdrawBaseAmount(e.target.value)} />
-          <input className="flex-1 p-2 border" placeholder="Quote amount (human, e.g. 1.5)" value={withdrawQuoteAmount} onChange={(e) => setWithdrawQuoteAmount(e.target.value)} />
+        <input className="w-full p-2 border rounded-md mt-2" placeholder="Destination address (0x...)" value={withdrawTo} onChange={(e) => setWithdrawTo(e.target.value)} />
+        <div className="flex flex-col md:flex-row gap-2 mt-2">
+          <input className="flex-1 p-2 border rounded-md" placeholder="Base amount (human, e.g. 0.1)" value={withdrawBaseAmount} onChange={(e) => setWithdrawBaseAmount(e.target.value)} />
+          <input className="flex-1 p-2 border rounded-md" placeholder="Quote amount (human, e.g. 1.5)" value={withdrawQuoteAmount} onChange={(e) => setWithdrawQuoteAmount(e.target.value)} />
         </div>
-        <button disabled={busy} className="mt-2 px-4 py-2 bg-green-600 text-white" onClick={handleWithdraw}>Withdraw Fees</button>
+        <button disabled={busy} className="mt-2 px-4 py-2 bg-green-600 text-white w-full md:w-auto rounded-md" onClick={handleWithdraw}>Withdraw Fees</button>
       </div>
     </Card>
   );
