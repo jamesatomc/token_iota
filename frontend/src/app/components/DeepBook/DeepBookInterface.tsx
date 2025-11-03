@@ -9,6 +9,7 @@ import TokenSelector from "../UI/TokenSelector";
 import TokenPicker from "../UI/TokenPicker";
 import OrderBookView from "./OrderBookView";
 import QuickTrade from "./QuickTrade";
+import TradingViewChart from "./TradingViewChart";
 
 type TradingPair = {
   bookId: string;
@@ -16,6 +17,11 @@ type TradingPair = {
   quoteToken: string;
   baseSymbol: string;
   quoteSymbol: string;
+};
+
+type PricePoint = {
+  time: number;
+  price: number;
 };
 
 export default function DeepBookInterface() {
@@ -42,6 +48,7 @@ export default function DeepBookInterface() {
   const [registeredPairs, setRegisteredPairs] = useState<TradingPair[]>([]);
   const [loadingPairs, setLoadingPairs] = useState(false);
   const [refreshTrigger, setRefreshTrigger] = useState(0);
+  const [priceHistory, setPriceHistory] = useState<PricePoint[]>([]);
 
   const { mutate: signAndExecute } = useSignAndExecuteTransaction();
   const currentAccount = useCurrentAccount();
@@ -206,7 +213,12 @@ export default function DeepBookInterface() {
             }
 
             if (mid !== undefined && mounted) {
-
+              const now = Math.floor(Date.now() / 1000);
+              setPriceHistory((prev) => {
+                const newHistory = [...prev, { time: now, price: mid }];
+                // Keep last 100 data points
+                return newHistory.slice(-100);
+              });
             }
           } catch {
             // ignore history capture errors
@@ -936,6 +948,14 @@ export default function DeepBookInterface() {
       {/* Quick Trade & Order Book View */}
       {(bookId && bookId.trim() !== "") || (bookSelect && bookSelect !== "" && bookSelect !== "manual") ? (
         <div className="mt-6 space-y-6">
+          {/* TradingView Chart */}
+          <TradingViewChart
+            bookId={bookId || bookSelect}
+            baseSymbol={DEFAULT_TOKENS.find((t) => t.type === baseToken)?.symbol || baseToken.split("::").pop() || "BASE"}
+            quoteSymbol={DEFAULT_TOKENS.find((t) => t.type === quoteToken)?.symbol || quoteToken.split("::").pop() || "QUOTE"}
+            priceData={priceHistory}
+          />
+
           {/* Quick Trade and Order Book side-by-side on md+ */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div>
