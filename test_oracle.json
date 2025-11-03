@@ -1,0 +1,66 @@
+{
+  "id": {
+    "id": "0x72d5d0ea329f6796d468a3b7be4da5f0b29badc258fb7d1760fc95ade49c2210"
+  },
+  "last_price_cumulative": "6329300000000",
+  "max_observations": "100",
+  "observations": [
+    {
+      "type": "0x56a20683946c17b80a5260ea8b5eac74c595e0615fe249364f1480dff04cb74f::PriceOracle::Observation",
+      "fields": {
+        "price_cumulative": "0",
+        "timestamp": "1762081095"
+      }
+    },
+    {
+      "type": "0x56a20683946c17b80a5260ea8b5eac74c595e0615fe249364f1480dff04cb74f::PriceOracle::Observation",
+      "fields": {
+        "price_cumulative": "148700000000",
+        "timestamp": "1762082582"
+      }
+    },
+    {
+      "type": "0x56a20683946c17b80a5260ea8b5eac74c595e0615fe249364f1480dff04cb74f::PriceOracle::Observation",
+      "fields": {
+        "price_cumulative": "2409700000000",
+        "timestamp": "1762105192"
+      }
+    },
+    {
+      "type": "0x56a20683946c17b80a5260ea8b5eac74c595e0615fe249364f1480dff04cb74f::PriceOracle::Observation",
+      "fields": {
+        "price_cumulative": "2569900000000",
+        "timestamp": "1762106794"
+      }
+    },
+    {
+      "type": "0x56a20683946c17b80a5260ea8b5eac74c595e0615fe249364f1480dff04cb74f::PriceOracle::Observation",
+      "fields": {
+        "price_cumulative": "6254900000000",
+        "timestamp": "1762143644"
+      }
+    },
+    {
+      "type": "0x56a20683946c17b80a5260ea8b5eac74c595e0615fe249364f1480dff04cb74f::PriceOracle::Observation",
+      "fields": {
+        "price_cumulative": "6269500000000",
+        "timestamp": "1762143790"
+      }
+    },
+    {
+      "type": "0x56a20683946c17b80a5260ea8b5eac74c595e0615fe249364f1480dff04cb74f::PriceOracle::Observation",
+      "fields": {
+        "price_cumulative": "6301200000000",
+        "timestamp": "1762144107"
+      }
+    },
+    {
+      "type": "0x56a20683946c17b80a5260ea8b5eac74c595e0615fe249364f1480dff04cb74f::PriceOracle::Observation",
+      "fields": {
+        "price_cumulative": "6329300000000",
+        "timestamp": "1762144388"
+      }
+    }
+  ],
+  "pool_id": "0x487201951f2cbe3f31a855d20f30ec55cb9aca4ffd9211da960f0d2fc412c0a9"
+}
