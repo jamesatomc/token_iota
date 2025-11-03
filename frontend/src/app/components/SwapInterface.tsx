@@ -519,7 +519,7 @@ export default function SwapInterface() {
                 </div>
                 <div className="ml-3">
                   <div className="font-semibold">{selectedPoolObj.tokenXSymbol}/{selectedPoolObj.tokenYSymbol}</div>
-                  <div className="text-xs text-gray-500">{selectedPoolObj.tokenXSymbol} paired with native {selectedPoolObj.tokenYSymbol} (Dev fee: {(parseInt(selectedPoolObj.feeBps || "0") / 100).toFixed(1)}%)</div>
+                  <div className="text-xs text-gray-500">{selectedPoolObj.tokenXSymbol} paired with native {selectedPoolObj.tokenYSymbol} (fee: {(parseInt(selectedPoolObj.feeBps || "0") / 100).toFixed(1)}%)</div>
                 </div>
               </div>
             </div>
