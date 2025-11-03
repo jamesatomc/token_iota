@@ -534,7 +534,7 @@ export default function LiquidityInterface() {
                       </div>
                       <div className="ml-3">
                         <div className="font-semibold">{p.tokenXSymbol}/{p.tokenYSymbol}</div>
-                        <div className="text-xs text-gray-500">{p.tokenXSymbol} paired with native {p.tokenYSymbol} (Dev fee: {(parseInt(p.feeBps) / 100).toFixed(1)}%)</div>
+                        <div className="text-xs text-gray-500">{p.tokenXSymbol} paired with native {p.tokenYSymbol} (fee: {(parseInt(p.feeBps) / 100).toFixed(1)}%)</div>
                       </div>
                     </div>
 
