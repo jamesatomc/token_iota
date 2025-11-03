@@ -94,20 +94,8 @@ export const DEX_FUNCTIONS = {
 // PriceOracle helper names
 export const ORACLE_FUNCTIONS = {
   CREATE_ORACLE: "create_oracle",
-  CREATE_AND_SHARE_ORACLE: "create_and_share_oracle",
   UPDATE_ORACLE: "update_oracle",
-  GET_TWAP: "get_twap_price",
-  GET_TWAP_AT_TIME: "get_twap_price_at_time",
-  GET_SPOT_PRICE: "get_spot_price",
-  FIND_OBSERVATION_INDEX: "find_observation_index",
-  GET_POOL_RESERVES: "get_pool_reserves",
-  GET_OBSERVATION_COUNT: "get_observation_count",
-  GET_OLDEST_OBSERVATION_TIME: "get_oldest_observation_time",
-  GET_LATEST_OBSERVATION_TIME: "get_latest_observation_time",
-  GET_POOL_ID: "get_pool_id",
-  GET_MAX_OBSERVATIONS: "get_max_observations",
-  GET_LAST_PRICE_CUMULATIVE: "get_last_price_cumulative",
-  GET_OBSERVATION_AT_INDEX: "get_observation_at_index",
+  GET_TWAP_PRICE_AT_TIME: "get_twap_price_at_time",
 };
 
 // Function names for DeepBook
