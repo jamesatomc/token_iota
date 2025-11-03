@@ -9,14 +9,19 @@ import TokenSelector from "../UI/TokenSelector";
 import TokenPicker from "../UI/TokenPicker";
 import OrderBookView from "./OrderBookView";
 import QuickTrade from "./QuickTrade";
-import PriceChart from "./PriceChart";
+
+type TradingPair = {
+  bookId: string;
+  baseToken: string;
+  quoteToken: string;
+  baseSymbol: string;
+  quoteSymbol: string;
+};
 
 export default function DeepBookInterface() {
-  // Use centralized default fee from contracts.ts (DEEPBOOK.DEFAULT_FEE_BPS)
   const [feeBps] = useState(DEEPBOOK.DEFAULT_FEE_BPS);
   const [maxDepth] = useState(DEEPBOOK.MAX_DEPTH);
   const [loadingCreate, setLoadingCreate] = useState(false);
-
   const [bookId, setBookId] = useState("");
   const [lastCreatedId, setLastCreatedId] = useState<string | null>(null);
   const [bookSelect, setBookSelect] = useState("");
@@ -27,107 +32,56 @@ export default function DeepBookInterface() {
   const [baseBalance, setBaseBalance] = useState<bigint | null>(null);
   const [quoteBalance, setQuoteBalance] = useState<bigint | null>(null);
   const [side, setSide] = useState<"bid" | "ask">("bid");
-  const [orderType, setOrderType] = useState<number>(0); // 0=limit,1=IOC,2=FOK,3=PostOnly
-  // price: allow human decimal input and normalized u64. The UI shows both.
+  const [orderType, setOrderType] = useState<number>(0);
   const [humanPrice, setHumanPrice] = useState("");
-  const [price, setPrice] = useState(""); // normalized u64 string
+  const [price, setPrice] = useState("");
   const [quantity, setQuantity] = useState("");
   const [loadingOrder, setLoadingOrder] = useState(false);
-
-  // Best bid/ask prices for quick trade
   const [bestBidPrice, setBestBidPrice] = useState<string | undefined>();
   const [bestAskPrice, setBestAskPrice] = useState<string | undefined>();
-
-  // Price history (mid prices) for the selected book
-  const [priceHistory, setPriceHistory] = useState<Array<{ ts: number; price: number }>>([]);
-  // Max history window (minutes) to keep in memory for chart
-  // setter not used — keep only the value to avoid unused variable lint
-  const [maxHistoryMinutes] = useState<number>(60);
-  const [lastUpdatedTs, setLastUpdatedTs] = useState<number | null>(null);
-  // Chart range selection for historical view: minute, day, month and year ranges plus full
-  // keys: 1m,5m,10m (minutes), 1d,7d (days), 1mo,3mo (months approx), 1y (year), all
-  const [chartRange, setChartRange] = useState<"1m" | "5m" | "10m" | "1d" | "7d" | "1mo" | "3mo" | "1y" | "all">("10m");
-  // Typed list of history ranges to avoid `any` casts
-  const HISTORY_RANGES: ("1m" | "5m" | "10m" | "1d" | "7d" | "1mo" | "3mo" | "1y" | "all")[] = [
-    "1m",
-    "5m",
-    "10m",
-    "1d",
-    "7d",
-    "1mo",
-    "3mo",
-    "1y",
-    "all",
-  ];
-
-  // Registered trading pairs from registry
-  const [registeredPairs, setRegisteredPairs] = useState<Array<{
-    bookId: string;
-    baseToken: string;
-    quoteToken: string;
-    baseSymbol: string;
-    quoteSymbol: string;
-  }>>([]);
+  const [registeredPairs, setRegisteredPairs] = useState<TradingPair[]>([]);
   const [loadingPairs, setLoadingPairs] = useState(false);
-  const [refreshTrigger, setRefreshTrigger] = useState(0); // Used to manually trigger refresh
+  const [refreshTrigger, setRefreshTrigger] = useState(0);
 
   const { mutate: signAndExecute } = useSignAndExecuteTransaction();
   const currentAccount = useCurrentAccount();
   const client = useIotaClient();
 
-  // Build a token list from registered pairs so TokenSelector can show all tokens present in registry
+  // Build available tokens from registered pairs
   const availableTokensFromPairs: TokenItem[] = (() => {
-    try {
-      const types = new Set<string>();
-      registeredPairs.forEach((p) => {
-        if (p.baseToken) types.add(p.baseToken);
-        if (p.quoteToken) types.add(p.quoteToken);
-      });
-      const items: TokenItem[] = [];
-      types.forEach((t) => {
-        const found = DEFAULT_TOKENS.find((d) => d.type === t);
-        if (found) items.push(found);
-        else items.push({ type: t, symbol: t.split("::").pop() || t });
-      });
-      return items;
-    } catch {
-      return [];
-    }
+    const types = new Set<string>();
+    registeredPairs.forEach((p) => {
+      types.add(p.baseToken);
+      types.add(p.quoteToken);
+    });
+    return Array.from(types).map((t) =>
+      DEFAULT_TOKENS.find((d) => d.type === t) ||
+      { type: t, symbol: t.split("::").pop() || t }
+    );
   })();
 
-  // helper: get decimals for a token type from DEFAULT_TOKENS (fallback to 9)
-  const getDecimals = (type: string) => {
-    const t = DEFAULT_TOKENS.find((x) => x.type === type);
-    return t && typeof t.decimals === "number" ? t.decimals : 9;
-  };
+  const getDecimals = (type: string) =>
+    DEFAULT_TOKENS.find((x) => x.type === type)?.decimals ?? 9;
 
-  // helper: convert bigint token amount to a human string with trailing zeros trimmed
   const humanizeAmount = (amt: bigint | null | undefined, decimals: number) => {
-    if (amt === null || amt === undefined) return "";
+    if (!amt) return "";
     try {
-      const s = formatAmount(amt, decimals);
-      // trim trailing zeros and optional decimal point
-      return s.replace(/\.?0+$/, "");
+      return formatAmount(amt, decimals).replace(/\.?0+$/, "");
     } catch {
       return "";
     }
   };
 
-  // helper: robustly extract numeric amount from a coin-like object returned by client.getCoins
-  type CoinLike = { amount?: string | number | bigint; balance?: string | number; value?: string | number; coinAmount?: string | number; amountMicro?: string | number } | null | undefined;
+  type CoinLike = { amount?: string | number | bigint; balance?: string | number } | null | undefined;
   const extractCoinValue = useCallback((coin: CoinLike): bigint | null => {
     if (!coin) return null;
-    const maybe = (coin as CoinLike)?.amount ?? (coin as CoinLike)?.balance ?? (coin as CoinLike)?.value ?? (coin as CoinLike)?.coinAmount ?? (coin as CoinLike)?.amountMicro ?? null;
-    if (maybe === null || maybe === undefined) return null;
+    const val = coin.amount ?? coin.balance;
+    if (!val) return null;
     try {
-      // many SDKs return string or number
-      if (typeof maybe === "string") return BigInt(maybe);
-      if (typeof maybe === "number") return BigInt(Math.floor(maybe));
-      if (typeof maybe === "bigint") return maybe;
+      return typeof val === "bigint" ? val : BigInt(Math.floor(Number(val)));
     } catch {
       return null;
     }
-    return null;
   }, []);
 
   // fetch balances for selected base and quote tokens
@@ -252,15 +206,7 @@ export default function DeepBookInterface() {
             }
 
             if (mid !== undefined && mounted) {
-              setPriceHistory((prev) => {
-                const now = Date.now();
-                const merged = prev.concat({ ts: now, price: mid! });
-                // prune by time window (maxHistoryMinutes)
-                const cutoff = now - maxHistoryMinutes * 60_000;
-                const pruned = merged.filter((p) => p.ts >= cutoff);
-                setLastUpdatedTs(now);
-                return pruned;
-              });
+
             }
           } catch {
             // ignore history capture errors
@@ -272,187 +218,105 @@ export default function DeepBookInterface() {
     };
 
     fetchPrices();
-    const iv = setInterval(fetchPrices, 10000); // refresh every 10s
+    const iv = setInterval(fetchPrices, 10000);
     return () => {
       mounted = false;
       clearInterval(iv);
     };
-  }, [bookId, bookSelect, client, maxHistoryMinutes]);
+  }, [bookId, bookSelect, client]);
+
+  // Helper to extract books table ID from registry
+  const extractBooksTableId = (registryFields: Record<string, unknown>): string | null => {
+    const books = registryFields.books;
+    if (!books) return null;
+    if (typeof books === 'string') return books;
+    if (typeof books === 'object' && books !== null && 'fields' in books) {
+      const fields = (books as Record<string, unknown>).fields as Record<string, unknown> | undefined;
+      const id = fields?.id;
+      return typeof id === 'string' ? id : (id as Record<string, unknown>)?.id as string || null;
+    }
+    return null;
+  };
+
+  const getSymbol = (type: string) =>
+    DEFAULT_TOKENS.find((t) => t.type === type)?.symbol || type.split("::").pop() || "???";
 
   // Fetch registered trading pairs from registry
   useEffect(() => {
     const fetchRegisteredPairs = async () => {
       const registryId = CONTRACTS.REGISTRY_BOOK_ID;
-      console.log("🔍 Checking registry:", registryId);
-
-      if (!registryId || registryId.trim() === "") {
-        console.log("❌ No registry ID configured");
-        return;
-      }
+      if (!registryId?.trim()) return;
 
       setLoadingPairs(true);
       try {
-        console.log("📡 Fetching registry object...");
-
-        // First, get the registry object to see its structure
         const registryObjInfo = await client.getObject({
           id: registryId,
           options: { showContent: true, showType: true },
         });
 
-        console.log("📦 Registry object:", JSON.stringify(registryObjInfo, null, 2));
-
-        // Check if registry has the 'books' table field
         let booksTableId = null;
         if (registryObjInfo?.data?.content && "fields" in registryObjInfo.data.content) {
-          const registryFields = registryObjInfo.data.content.fields as unknown as Record<string, unknown>;
-          console.log("📚 Registry fields:", registryFields);
-          if (registryFields.books) {
-            // Books is a Table object, extract its ID
-            if (typeof registryFields.books === 'object' && 'fields' in (registryFields.books as object)) {
-              // Safe access: cast to unknown then inspect properties in a type-safe manner
-              const bfUnknown = registryFields.books as unknown;
-              if (typeof bfUnknown === 'object' && bfUnknown !== null) {
-                const bfRec = bfUnknown as Record<string, unknown>;
-                const fieldsObj = bfRec.fields as Record<string, unknown> | undefined;
-                if (fieldsObj) {
-                  const idObj = fieldsObj.id as Record<string, unknown> | string | undefined;
-                  if (typeof idObj === 'string') booksTableId = idObj;
-                  else if (typeof idObj === 'object' && idObj !== null) booksTableId = (idObj as Record<string, unknown>).id as string | undefined || null;
-                }
-              }
-            } else if (typeof registryFields.books === 'string') {
-              booksTableId = registryFields.books;
-            }
-            console.log("📖 Books table ID:", booksTableId);
-          }
+          const registryFields = registryObjInfo.data.content.fields as Record<string, unknown>;
+          booksTableId = extractBooksTableId(registryFields);
         }
 
-        // Try to get dynamic fields from the books table (not registry itself)
         const parentId = booksTableId || registryId;
-        console.log("📡 Fetching dynamic fields from:", parentId);
-        const registryObj = await client.getDynamicFields({
-          parentId: parentId,
-        });
+        const registryObj = await client.getDynamicFields({ parentId });
 
-        console.log("📋 Dynamic fields result:", JSON.stringify(registryObj, null, 2));
-        console.log("📊 Number of fields:", registryObj?.data?.length || 0);
-
-        if (!registryObj?.data || registryObj.data.length === 0) {
-          console.log("❗ Registry is empty. Make sure you:");
-          console.log("   1. Use the latest Package ID:", CONTRACTS.PACKAGE_ID);
-          console.log("   2. Click 'Get or Create Order Book' button (not command line)");
-          console.log("   3. Wait for transaction to complete");
-          console.log("   4. Check transaction includes:", `${CONTRACTS.PACKAGE_ID}::DeepBook::get_or_create_order_book`);
+        if (!registryObj?.data?.length) {
+          console.log("Registry is empty");
+          return;
         }
 
-        if (registryObj?.data && Array.isArray(registryObj.data)) {
-          const pairs: typeof registeredPairs = [];
+        const pairs: TradingPair[] = [];
+        for (const field of registryObj.data) {
+          try {
+            const fieldObj = await client.getDynamicFieldObject({
+              parentId,
+              name: field.name,
+            });
 
-          for (const field of registryObj.data) {
-            try {
-              console.log("🔑 Processing field:", field);
+            const bookAddress =
+              (fieldObj?.data?.content && "fields" in fieldObj.data.content
+                ? (fieldObj.data.content.fields as Record<string, unknown>).value as string
+                : fieldObj?.data?.objectId || field.objectId) as string;
 
-              // Get the dynamic field object which contains the book address
-              // Use the books table ID as parent, not the registry ID
-              const fieldObj = await client.getDynamicFieldObject({
-                parentId: parentId, // Use books table ID, not registry ID
-                name: field.name,
+            if (!bookAddress) continue;
+
+            const bookObj = await client.getObject({
+              id: bookAddress,
+              options: { showType: true },
+            });
+
+            const typeStr = bookObj?.data?.type as string;
+            const match = typeStr?.match(/<(.+),\s*(.+)>/);
+
+            if (match?.[1] && match?.[2]) {
+              pairs.push({
+                bookId: bookAddress,
+                baseToken: match[1].trim(),
+                quoteToken: match[2].trim(),
+                baseSymbol: getSymbol(match[1].trim()),
+                quoteSymbol: getSymbol(match[2].trim()),
               });
-
-              console.log("📄 Field object:", fieldObj);
-
-              let bookAddress = null;
-
-              // Try to extract book address from field object
-              if (fieldObj?.data?.content && "fields" in fieldObj.data.content) {
-                const fields = fieldObj.data.content.fields as unknown as Record<string, unknown>;
-                // Extract common string-valued fields
-                bookAddress = (fields.value as string) || (fields.book_id as string) || (fields.id as string) || null;
-              }
-              // If field object query failed, try to extract from objectId
-              else if (fieldObj?.data?.objectId) {
-                bookAddress = fieldObj.data.objectId;
-              }
-              // Try from field.objectId as fallback
-              else if (field.objectId) {
-                bookAddress = field.objectId;
-              }
-
-              console.log("📘 Book address:", bookAddress);
-
-              if (!bookAddress) {
-                console.warn("⚠️ No book address found, skipping field");
-                console.warn("Field data:", JSON.stringify(field, null, 2));
-                continue;
-              }
-
-              // Get the book object to extract token types
-              const bookObj = await client.getObject({
-                id: bookAddress,
-                options: { showType: true },
-              });
-
-              console.log("📖 Book object:", bookObj);
-
-              if (bookObj?.data?.type) {
-                const typeStr = bookObj.data.type as string;
-                console.log("🏷️ Type string:", typeStr);
-
-                // Parse type: "0xPACKAGE::DeepBook::OrderBook<BASE_TYPE, QUOTE_TYPE>"
-                const match = typeStr.match(/<(.+),\s*(.+)>/);
-
-                if (match && match[1] && match[2]) {
-                  const baseType = match[1].trim();
-                  const quoteType = match[2].trim();
-                  console.log("✅ Parsed types:", { baseType, quoteType });
-
-                  // Get symbols
-                  const getSymbol = (type: string) => {
-                    const token = DEFAULT_TOKENS.find((t) => t.type === type);
-                    return token?.symbol || type.split("::").pop() || "???";
-                  };
-
-                  const pair = {
-                    bookId: bookAddress,
-                    baseToken: baseType,
-                    quoteToken: quoteType,
-                    baseSymbol: getSymbol(baseType),
-                    quoteSymbol: getSymbol(quoteType),
-                  };
-
-                  console.log("✨ Added pair:", pair);
-                  pairs.push(pair);
-                } else {
-                  console.warn("⚠️ Failed to parse type:", typeStr);
-                }
-              }
-            } catch (err) {
-              console.warn("❌ Failed to process dynamic field:", err);
             }
+          } catch (err) {
+            console.warn("Failed to process field:", err);
           }
-
-          console.log("🎉 Total pairs found:", pairs.length);
-          if (pairs.length > 0) {
-            console.table(pairs);
-          }
-          setRegisteredPairs(pairs);
-        } else {
-          console.log("❌ No dynamic fields data found");
-          console.log("Registry might be empty or inaccessible");
         }
+
+        setRegisteredPairs(pairs);
       } catch (err) {
-        console.error("❌ Failed to fetch registered pairs:", err);
+        console.error("Failed to fetch pairs:", err);
       } finally {
         setLoadingPairs(false);
       }
     };
 
     fetchRegisteredPairs();
-    // Refresh every 30 seconds
     const iv = setInterval(fetchRegisteredPairs, 30000);
     return () => clearInterval(iv);
-  }, [client, lastCreatedId, refreshTrigger]); // Re-fetch when a new book is created or manual refresh
+  }, [client, lastCreatedId, refreshTrigger]);
 
   // When registered pairs are discovered, if the user hasn't selected a book yet,
   // auto-select the first registered pair so the UI supports arbitrary pairs by default.
@@ -491,386 +355,194 @@ export default function DeepBookInterface() {
     }
   }, [humanPrice]);
 
-  const handleCreateBook = useCallback(async () => {
-    if (!currentAccount) {
-      alert("Connect wallet to create an order book");
-      return;
-    }
+  const extractBookIdFromResult = (res: unknown): string | null => {
+    const idRegex = /^0x[0-9a-fA-F]{64}$/;
+    const candidates: string[] = [];
 
-    // Check if base and quote tokens are the same
-    if (baseToken === quoteToken) {
-      alert("❌ Invalid token pair!\n\nBase token and Quote token must be different.\n\nPlease select different tokens for the trading pair.");
+    const search = (val: unknown): void => {
+      if (!val) return;
+      if (typeof val === "string" && idRegex.test(val)) {
+        candidates.push(val);
+        return;
+      }
+      if (Array.isArray(val)) {
+        val.forEach(search);
+      } else if (typeof val === "object") {
+        Object.values(val as Record<string, unknown>).forEach(search);
+      }
+    };
+
+    search(res);
+    return candidates[0] || null;
+  };
+
+  const handleCreateBook = useCallback(async () => {
+    if (!currentAccount || baseToken === quoteToken) {
+      alert(baseToken === quoteToken
+        ? "❌ Base and Quote tokens must be different"
+        : "Connect wallet first");
       return;
     }
 
     setLoadingCreate(true);
     try {
       const tx = new Transaction();
-
-      // Build call spec using GlobalOrderBookRegistry
       const registryId = CONTRACTS.REGISTRY_BOOK_ID;
-      const objIdRegex = /^0x[0-9a-fA-F]{64}$/;
-
-      // Get actual decimals for base and quote tokens
+      const isValidRegistry = registryId && /^0x[0-9a-fA-F]{64}$/.test(registryId);
       const baseDecimals = getDecimals(baseToken);
       const quoteDecimals = getDecimals(quoteToken);
 
-      let callSpec: Parameters<typeof tx.moveCall>[0];
-
-      if (registryId && registryId.trim() !== "" && objIdRegex.test(registryId)) {
-        // Use get_or_create_order_book_with_decimals (explicit decimals version)
-        // This function returns the book address and prevents duplicate books
-        callSpec = {
-          target: `${CONTRACTS.PACKAGE_ID}::${MODULES.DEEPBOOK}::${DEEPBOOK_FUNCTIONS.GET_OR_CREATE_WITH_DECIMALS}`,
-          arguments: [
-            tx.object(registryId),
-            tx.pure.u64(feeBps),
-            tx.pure.u64(maxDepth),
-            tx.pure.u8(baseDecimals),
-            tx.pure.u8(quoteDecimals)
-          ],
-          typeArguments: [baseToken, quoteToken],
-        };
-      } else if (registryId && registryId.trim() !== "") {
-        // Registry is set but invalid format — log and fall back to non-registry create
-        console.warn("Configured registry id looks invalid, falling back to non-registry create:", registryId);
-        alert("⚠️ Configured registry id is invalid. Falling back to direct create.\n\nTo use the registry:\n1. Deploy with: iota client call --package <PACKAGE_ID> --module DeepBook --function create_global_registry\n2. Copy the created GlobalOrderBookRegistry object ID\n3. Set it in CONTRACTS.REGISTRY_BOOK_ID in contracts.ts");
-        callSpec = {
-          target: `${CONTRACTS.PACKAGE_ID}::${MODULES.DEEPBOOK}::${DEEPBOOK_FUNCTIONS.CREATE_ORDER_BOOK_WITH_DECIMALS}`,
-          arguments: [
-            tx.pure.u64(feeBps),
-            tx.pure.u64(maxDepth),
-            tx.pure.u8(baseDecimals),
-            tx.pure.u8(quoteDecimals)
-          ],
-          typeArguments: [baseToken, quoteToken],
-        };
-      } else {
-        // No registry configured — call plain create with explicit decimals
-        console.warn("No registry configured. Using direct create (allows duplicate books).");
-        callSpec = {
-          target: `${CONTRACTS.PACKAGE_ID}::${MODULES.DEEPBOOK}::${DEEPBOOK_FUNCTIONS.CREATE_ORDER_BOOK_WITH_DECIMALS}`,
-          arguments: [
-            tx.pure.u64(feeBps),
-            tx.pure.u64(maxDepth),
-            tx.pure.u8(baseDecimals),
-            tx.pure.u8(quoteDecimals)
-          ],
-          typeArguments: [baseToken, quoteToken],
-        };
-      }
-
-      // Debug log the payload so dry-run type mismatches can be diagnosed easily
-      try {
-        console.debug("DeepBook - moveCall payload:", callSpec);
-        // also log prepared tx after adding the moveCall (some SDKs embed commands)
-      } catch (logErr) {
-        console.warn("Failed to log tx payload", logErr);
-      }
+      const callSpec: Parameters<typeof tx.moveCall>[0] = isValidRegistry ? {
+        target: `${CONTRACTS.PACKAGE_ID}::${MODULES.DEEPBOOK}::${DEEPBOOK_FUNCTIONS.GET_OR_CREATE_WITH_DECIMALS}`,
+        arguments: [tx.object(registryId), tx.pure.u64(feeBps), tx.pure.u64(maxDepth), tx.pure.u8(baseDecimals), tx.pure.u8(quoteDecimals)],
+        typeArguments: [baseToken, quoteToken],
+      } : {
+        target: `${CONTRACTS.PACKAGE_ID}::${MODULES.DEEPBOOK}::${DEEPBOOK_FUNCTIONS.CREATE_ORDER_BOOK_WITH_DECIMALS}`,
+        arguments: [tx.pure.u64(feeBps), tx.pure.u64(maxDepth), tx.pure.u8(baseDecimals), tx.pure.u8(quoteDecimals)],
+        typeArguments: [baseToken, quoteToken],
+      };
 
       tx.moveCall(callSpec);
 
-      signAndExecute(
-        { transaction: tx },
-        {
-          onSuccess: (r) => {
-            console.log("create_order_book success", r);
-            try {
-              const res = r as unknown;
-
-              // helper: recursively search response for candidate object ids
-              const candidates: string[] = [];
-              const idRegex = /^0x[0-9a-fA-F]{64}$/;
-
-              const pushFrom = (val: unknown) => {
-                if (val === null || val === undefined) return;
-                if (typeof val === "string") {
-                  const s = val as string;
-                  if (idRegex.test(s)) {
-                    candidates.push(s);
-                    return;
-                  }
-                }
-                if (Array.isArray(val)) {
-                  (val as unknown[]).forEach(pushFrom);
-                  return;
-                }
-                if (typeof val === "object") {
-                  const obj = val as Record<string, unknown>;
-                  // Common places: returnValues, effects.createdObjects (array of objects), events (array)
-                  Object.entries(obj).forEach(([k, v]) => {
-                    // If event object contains nested fields like { type: "...::OrderBookCreated", data: { book_id: "0x..." } }
-                    if (k && k.toLowerCase().includes("event") && v) pushFrom(v);
-                    else if (k && k.toLowerCase().includes("created") && v) pushFrom(v);
-                    else if (k && k.toLowerCase().includes("return") && v) pushFrom(v);
-                    else if (k && (k === "objectId" || k === "id" || k === "book_id" || k === "address")) pushFrom(v);
-                    else pushFrom(v);
-                  });
-                }
-              };
-
-              pushFrom(res);
-
-              // prefer the first candidate that looks like an object id
-              const found = candidates.length > 0 ? candidates[0] : null;
-
-              if (found) {
-                setLastCreatedId(found);
-                setBookId(found);
-                setBookSelect(found);
-                const useRegistry = CONTRACTS.REGISTRY_BOOK_ID && CONTRACTS.REGISTRY_BOOK_ID.trim() !== "";
-
-                // Trigger re-fetch of registered pairs by updating lastCreatedId
-                // The useEffect will automatically re-run
-                setTimeout(() => {
-                  console.log("🔄 Triggering pairs refresh after order book creation...");
-                  setLoadingPairs(true);
-                }, 2000);
-
-                alert(`✅ ${useRegistry ? 'Order book ready' : 'Order book created'}\n\nBook ID: ${found}\n\n${useRegistry ? '(Retrieved from registry or newly created)\n\nRefreshing trading pairs list...' : '(Newly created - not registered)'}`);
-              } else {
-                alert("⚠️ Transaction submitted but could not auto-detect book ID.\n\nPlease:\n1. Check the transaction in IOTA Explorer\n2. Find the OrderBookCreated event or created object\n3. Copy the book_id / object ID\n4. Paste it into the OrderBook ID field below");
-              }
-            } catch (err) {
-              console.warn("failed to parse create result", err);
-              alert("✅ Transaction submitted successfully!\n\nCheck IOTA Explorer for:\n• OrderBookCreated event with book_id\n• Created OrderBook object\n\nCopy the object ID to use below.");
-            }
-          },
-          onError: (e) => {
-            console.error("create_order_book error:", e);
-            const errStr = String(e);
-
-            // Parse common errors
-            if (errStr.includes("E_SAME_TOKEN_PAIR")) {
-              alert("❌ Invalid token pair!\n\nBase token and Quote token cannot be the same.\n\nPlease select different tokens for your trading pair.");
-            } else if (errStr.includes("E_ORDERBOOK_ALREADY_EXISTS") || errStr.includes("already exists")) {
-              alert("❌ Order book already exists for this token pair!\n\nThis pair is already registered in the global registry.\nUse a different token pair or query the existing book.");
-            } else if (errStr.includes("E_INVALID_FEE")) {
-              alert("❌ Invalid fee setting!\n\nFee must be ≤ 1000 basis points (10%)");
-            } else if (errStr.includes("E_INVALID_DEPTH")) {
-              alert("❌ Invalid depth setting!\n\nDepth must be between 1 and 10,000");
-            } else if (errStr.includes("Insufficient")) {
-              alert("❌ Insufficient gas!\n\nPlease ensure you have enough IOTA for gas fees.");
-            } else {
-              alert(`❌ Failed to create order book\n\nError: ${errStr}\n\nCheck console for details.`);
-            }
-          },
-        }
-      );
+      signAndExecute({ transaction: tx }, {
+        onSuccess: (r) => {
+          const found = extractBookIdFromResult(r);
+          if (found) {
+            setLastCreatedId(found);
+            setBookId(found);
+            setBookSelect(found);
+            setTimeout(() => setLoadingPairs(true), 2000);
+            alert(`✅ Order book ${isValidRegistry ? 'ready' : 'created'}\n\nBook ID: ${found}`);
+          } else {
+            alert("⚠️ Check IOTA Explorer for the created OrderBook object ID");
+          }
+        },
+        onError: (e) => {
+          const errStr = String(e);
+          const errorMsg =
+            errStr.includes("E_SAME_TOKEN_PAIR") ? "Base and Quote must be different" :
+              errStr.includes("already exists") ? "Order book already exists for this pair" :
+                errStr.includes("E_INVALID_FEE") ? "Fee must be ≤ 1000 bps" :
+                  errStr.includes("E_INVALID_DEPTH") ? "Depth must be 1-10,000" :
+                    errStr.includes("Insufficient") ? "Insufficient gas" : errStr;
+          alert(`❌ ${errorMsg}`);
+        },
+      });
     } catch (err) {
-      console.error("Error preparing order book tx:", err);
-      alert(`❌ Failed to prepare transaction\n\nError: ${String(err)}\n\nPlease check:\n• Wallet is connected\n• Token types are valid\n• Network connection`);
+      alert(`❌ ${String(err)}`);
     } finally {
       setLoadingCreate(false);
     }
   }, [signAndExecute, feeBps, maxDepth, baseToken, quoteToken, currentAccount]);
 
+  const computeQuoteRequired = (qBaseUnits: bigint, pNorm: bigint, baseDec: number, quoteDec: number) => {
+    const priceScale = BigInt(DEEPBOOK.PRICE_SCALE as number);
+    const diff = quoteDec - baseDec;
+    let numerator = qBaseUnits * pNorm;
+    let denominator = priceScale;
+    if (diff > 0) numerator *= BigInt(10) ** BigInt(diff);
+    else if (diff < 0) denominator *= BigInt(10) ** BigInt(-diff);
+    return numerator / denominator;
+  };
+
+  const getCoinInput = useCallback(async (tx: Transaction, tokenType: string, amount: bigint) => {
+    if (tokenType === CONTRACTS.IOTA.TYPE) {
+      const [coin] = tx.splitCoins(tx.gas, [amount.toString()]);
+      return coin;
+    }
+    const coins = await client.getCoins({ owner: currentAccount!.address, coinType: tokenType });
+    if (!coins?.data?.length) throw new Error(`No ${tokenType} coins`);
+
+    const [primary, ...rest] = coins.data;
+    if (rest.length) tx.mergeCoins(tx.object(primary.coinObjectId), rest.map(c => tx.object(c.coinObjectId)));
+    const [coin] = tx.splitCoins(tx.object(primary.coinObjectId), [amount.toString()]);
+    return coin;
+  }, [client, currentAccount]);
+
   const handlePlaceOrder = useCallback(async () => {
-    if (!currentAccount) {
-      alert("Connect wallet to place orders");
-      return;
-    }
-    if (!bookId || !bookId.trim()) {
-      alert("Please provide the OrderBook object id (bookId)");
-      return;
-    }
-    if (!price || !quantity) {
-      alert("Enter price and quantity");
+    if (!currentAccount || !bookId?.trim() || !price || !quantity) {
+      alert("Please fill all fields and connect wallet");
       return;
     }
 
     setLoadingOrder(true);
     try {
       const tx = new Transaction();
-
-      // convert price and quantity to u64 values expected by Move
-      // price is expected as normalized integer (price * PRICE_SCALE). In UI we expect user to supply normalized integer string or simple numeric — we accept raw string and attempt to parse as integer.
       const priceU64 = BigInt(price);
-      // quantity may be entered as a decimal (e.g. 0.1). Parse to smallest units using base token decimals.
-      // Prefer on-chain decimals from the OrderBook object to match Move calculations
       let baseDecimals = getDecimals(baseToken);
       let quoteDecimals = getDecimals(quoteToken);
+
+      // Validate on-chain decimals
       try {
         const bookObj = await client.getObject({ id: bookId, options: { showContent: true } });
         if (bookObj?.data?.content && "fields" in bookObj.data.content) {
           const fields = bookObj.data.content.fields as Record<string, unknown>;
-          const tryNum = (v: unknown): number | undefined => {
-            if (v === undefined || v === null) return undefined;
-            try {
-              if (typeof v === 'number') return Number(v);
-              if (typeof v === 'string') return Number(v);
-              if (typeof v === 'object' && v !== null && 'toString' in v) return Number((v as { toString: () => string }).toString());
-            } catch {
-              return undefined;
-            }
-            return undefined;
-          };
-          const onchainBase = tryNum(fields.base_decimals ?? fields.baseDecimals ?? fields.base_decimals_u8);
-          const onchainQuote = tryNum(fields.quote_decimals ?? fields.quoteDecimals ?? fields.quote_decimals_u8);
-          if (typeof onchainBase === 'number' && !Number.isNaN(onchainBase)) baseDecimals = onchainBase;
-          if (typeof onchainQuote === 'number' && !Number.isNaN(onchainQuote)) quoteDecimals = onchainQuote;
+          const onchainBase = Number(fields.base_decimals ?? fields.baseDecimals);
+          const onchainQuote = Number(fields.quote_decimals ?? fields.quoteDecimals);
 
-          console.log('📊 Order Book Decimals Check:');
-          console.log(`  On-chain base_decimals: ${onchainBase} (expected: ${getDecimals(baseToken)})`);
-          console.log(`  On-chain quote_decimals: ${onchainQuote} (expected: ${getDecimals(quoteToken)})`);
-
-          // Alert if decimals mismatch
-          if (onchainBase !== getDecimals(baseToken) || onchainQuote !== getDecimals(quoteToken)) {
-            console.warn('⚠️ DECIMALS MISMATCH! Order book has wrong decimals!');
-            console.warn(`  This order book was created with base=${onchainBase}, quote=${onchainQuote}`);
-            console.warn(`  But tokens actually have base=${getDecimals(baseToken)}, quote=${getDecimals(quoteToken)}`);
-            console.warn('  You need to create a NEW order book with correct decimals!');
-
+          if (!isNaN(onchainBase) && onchainBase !== getDecimals(baseToken)) {
+            alert(`❌ Decimals mismatch! Create a new order book with correct decimals.`);
             setLoadingOrder(false);
-            alert(`❌ WRONG ORDER BOOK DECIMALS!\n\n` +
-              `This order book was created with incorrect decimal settings:\n` +
-              `• On-chain base_decimals: ${onchainBase} (should be ${getDecimals(baseToken)})\n` +
-              `• On-chain quote_decimals: ${onchainQuote} (should be ${getDecimals(quoteToken)})\n\n` +
-              `This will cause WRONG AMOUNTS in transactions!\n\n` +
-              `SOLUTION:\n` +
-              `1. Click "Get or Create Order Book" button above\n` +
-              `2. It will create a NEW order book with CORRECT decimals\n` +
-              `3. The new book will show in the dropdown list\n` +
-              `4. Select it and try again\n\n` +
-              `DO NOT use this old order book!`);
             return;
           }
+          if (!isNaN(onchainBase)) baseDecimals = onchainBase;
+          if (!isNaN(onchainQuote)) quoteDecimals = onchainQuote;
         }
       } catch (err) {
-        console.warn('Failed to fetch order book decimals, falling back to token decimals', err);
+        console.warn('Using token decimals', err);
       }
+
       const quantityU64 = BigInt(parseAmount(quantity, baseDecimals));
 
-      // helper to compute quote amount (smallest units) with correct decimal adjustment and rounding-up
-      const computeQuoteRequired = (qBaseUnits: bigint, pNorm: bigint, baseDec: number, quoteDec: number) => {
-        // Match Move implementation exactly: floor((quantity * price * 10^{quote_decimals}) / (PRICE_SCALE * 10^{base_decimals}))
-        const priceScale = BigInt(DEEPBOOK.PRICE_SCALE as number);
-        const diff = quoteDec - baseDec;
-        let numerator = qBaseUnits * pNorm;
-        let denominator = priceScale;
-        if (diff > 0) numerator = numerator * (BigInt(10) ** BigInt(diff));
-        else if (diff < 0) denominator = denominator * (BigInt(10) ** BigInt(-diff));
-        // floor division (BigInt division is floor by default for positive ints)
-        return numerator / denominator;
-      };
-
-      // Build coin input depending on side
       if (side === "bid") {
-        // payment: Coin<Quote> (quote token provided by taker). If quote is IOTA, split from gas.
-        let coinIn;
         const requiredQuote = computeQuoteRequired(quantityU64, priceU64, baseDecimals, quoteDecimals);
-
-        // Basic validation
         if (requiredQuote <= BigInt(0)) {
-          alert("❌ Computed required quote amount is zero. Price/quantity too small. Increase quantity or price.");
+          alert("❌ Amount too small");
           setLoadingOrder(false);
           return;
         }
+        const buffer = (requiredQuote * BigInt(101) + BigInt(99)) / BigInt(100);
+        const coinIn = await getCoinInput(tx, quoteToken, buffer);
 
-        console.debug("place order (bid) computed requiredQuote:", requiredQuote.toString());
-
-        if (quoteToken === CONTRACTS.IOTA.TYPE) {
-          // Add 1% buffer for slippage/gas, rounded up
-          const buffer = (requiredQuote * BigInt(101) + BigInt(99)) / BigInt(100);
-          [coinIn] = tx.splitCoins(tx.gas, [buffer.toString()]);
-        } else {
-          // fetch coins for quoteToken
-          const coins = await client.getCoins({ owner: currentAccount.address, coinType: quoteToken });
-          if (!coins || !coins.data || coins.data.length === 0) {
-            alert("No coins for quote token available to fund bid");
-            setLoadingOrder(false);
-            return;
-          }
-          const [primary, ...rest] = coins.data;
-          if (rest.length > 0) {
-            tx.mergeCoins(tx.object(primary.coinObjectId), rest.map((c) => tx.object(c.coinObjectId)));
-          }
-
-          // Add 1% buffer for slippage/gas and round up
-          const buffer = (requiredQuote * BigInt(101) + BigInt(99)) / BigInt(100);
-          [coinIn] = tx.splitCoins(tx.object(primary.coinObjectId), [buffer.toString()]);
-        }
-
-        // Move signature: place_bid(book: &mut OrderBook<Base,Quote>, price: u64, quantity: u64, payment: Coin<Quote>, ctx: &mut TxContext)
-        const callSpec = {
+        tx.moveCall({
           target: `${CONTRACTS.PACKAGE_ID}::${MODULES.DEEPBOOK}::${DEEPBOOK_FUNCTIONS.PLACE_BID}`,
           arguments: [tx.object(bookId), tx.pure.u64(priceU64.toString()), tx.pure.u64(quantityU64.toString()), coinIn, tx.pure.u8(orderType)],
           typeArguments: [baseToken, quoteToken],
-        } as Parameters<typeof tx.moveCall>[0];
-        console.debug("DeepBook - placeBid payload:", callSpec);
-        tx.moveCall(callSpec);
+        });
       } else {
-        // ask: base_coin: Coin<Base>
-        let coinIn;
+        const coinIn = await getCoinInput(tx, baseToken, quantityU64);
 
-        // For asks the required base is simply the quantity in base smallest units
-        if (baseToken === CONTRACTS.IOTA.TYPE) {
-          [coinIn] = tx.splitCoins(tx.gas, [quantityU64.toString()]);
-        } else {
-          const coins = await client.getCoins({ owner: currentAccount.address, coinType: baseToken });
-          if (!coins || !coins.data || coins.data.length === 0) {
-            alert("No coins for base token available to fund ask");
-            setLoadingOrder(false);
-            return;
-          }
-          const [primary, ...rest] = coins.data;
-          if (rest.length > 0) {
-            tx.mergeCoins(tx.object(primary.coinObjectId), rest.map((c) => tx.object(c.coinObjectId)));
-          }
-
-          [coinIn] = tx.splitCoins(tx.object(primary.coinObjectId), [quantityU64.toString()]);
-        }
-
-        // Move signature: place_ask(book: &mut OrderBook<Base,Quote>, price: u64, quantity: u64, base_coin: Coin<Base>, ctx: &mut TxContext)
-        const callSpec = {
+        tx.moveCall({
           target: `${CONTRACTS.PACKAGE_ID}::${MODULES.DEEPBOOK}::${DEEPBOOK_FUNCTIONS.PLACE_ASK}`,
           arguments: [tx.object(bookId), tx.pure.u64(priceU64.toString()), tx.pure.u64(quantityU64.toString()), coinIn, tx.pure.u8(orderType)],
           typeArguments: [baseToken, quoteToken],
-        } as Parameters<typeof tx.moveCall>[0];
-        console.debug("DeepBook - placeAsk payload:", callSpec);
-        tx.moveCall(callSpec);
+        });
       }
 
       signAndExecute({ transaction: tx }, {
-        onSuccess: (r) => {
-          console.log("place order success", r);
-          const orderType = side === "bid" ? "Buy" : "Sell";
-          alert(`✅ ${orderType} order submitted!\n\nQuantity: ${quantity}\nPrice: ${humanPrice || price}\n\nCheck transaction in IOTA Explorer for:\n• OrderPlaced event (if resting)\n• OrderMatched event (if filled)\n• Your updated balance`);
-
-          // Clear form
+        onSuccess: () => {
+          alert(`✅ ${side === "bid" ? "Buy" : "Sell"} order submitted!`);
           setHumanPrice("");
           setPrice("");
           setQuantity("");
         },
         onError: (e) => {
-          console.error("place order error:", e);
           const errStr = String(e);
-
-          // Parse common errors
-          if (errStr.includes("E_INSUFFICIENT_LIQUIDITY")) {
-            alert(`❌ Insufficient ${side === "bid" ? "quote" : "base"} token balance!\n\nYou need ${side === "bid" ? "quote (payment)" : "base"} tokens to place this order.\n\nCheck your wallet balance.`);
-          } else if (errStr.includes("E_INVALID_PRICE")) {
-            alert("❌ Invalid price!\n\nPrice must be greater than 0.");
-          } else if (errStr.includes("E_INVALID_QUANTITY")) {
-            alert("❌ Invalid quantity!\n\nQuantity must be greater than 0.");
-          } else if (errStr.includes("E_OVERFLOW")) {
-            alert("❌ Numeric overflow detected (order values too large).\n\nReduce price or quantity and try again.");
-          } else if (errStr.includes("not found") || errStr.includes("does not exist")) {
-            alert("❌ Order book not found!\n\nThe specified OrderBook object ID does not exist or is invalid.\n\nPlease verify the book ID.");
-          } else if (errStr.includes("Insufficient")) {
-            alert("❌ Insufficient funds or gas!\n\nPlease ensure you have:\n• Enough tokens for the order\n• Enough IOTA for gas fees");
-          } else {
-            alert(`❌ Failed to place order\n\nError: ${errStr}\n\nCheck console for details.`);
-          }
+          const errorMsg =
+            errStr.includes("E_INSUFFICIENT_LIQUIDITY") ? `Insufficient ${side === "bid" ? "quote" : "base"} balance` :
+              errStr.includes("E_INVALID_PRICE") ? "Invalid price" :
+                errStr.includes("E_INVALID_QUANTITY") ? "Invalid quantity" :
+                  errStr.includes("E_OVERFLOW") ? "Values too large" :
+                    errStr.includes("not found") ? "Order book not found" : errStr;
+          alert(`❌ ${errorMsg}`);
         },
       });
     } catch (err) {
-      console.error("Error preparing order tx:", err);
-      alert(`❌ Failed to prepare order\n\nError: ${String(err)}\n\nPlease check:\n• Order book ID is valid\n• Token balances are sufficient\n• Price and quantity are valid`);
+      alert(`❌ ${String(err)}`);
     } finally {
       setLoadingOrder(false);
     }
-  }, [signAndExecute, client, currentAccount, bookId, baseToken, quoteToken, price, quantity, side, humanPrice, orderType]);
+  }, [signAndExecute, client, currentAccount, bookId, baseToken, quoteToken, price, quantity, side, orderType, getCoinInput]);
 
   return (
     <div className="min-h-[420px] w-full max-w-6xl mx-auto px-2 sm:px-4">
@@ -1264,74 +936,6 @@ export default function DeepBookInterface() {
       {/* Quick Trade & Order Book View */}
       {(bookId && bookId.trim() !== "") || (bookSelect && bookSelect !== "" && bookSelect !== "manual") ? (
         <div className="mt-6 space-y-6">
-          {/* Price Chart */}
-          <div className="p-4 rounded-xl bg-white border border-gray-100">
-            <div className="flex items-center justify-between mb-3">
-              <div className="text-sm font-medium text-gray-700">Price (mid)</div>
-              <div className="text-xs text-gray-500">{priceHistory.length > 0 ? `${priceHistory[priceHistory.length - 1].price.toLocaleString(undefined, { maximumFractionDigits: 6 })} (human)` : '-'}</div>
-            </div>
-            {/* Chart controls */}
-            <div className="flex items-center justify-between mb-3">
-              <div className="flex flex-col sm:flex-row sm:items-center gap-3">
-                <div className="text-xs text-gray-500">History:</div>
-                <div className="flex flex-wrap gap-1">
-                  {HISTORY_RANGES.map((r) => (
-                    <button key={r} onClick={() => setChartRange(r)} className={`px-2 py-1 rounded ${chartRange === r ? 'bg-blue-50 text-blue-700 border border-blue-200' : 'bg-white border border-gray-100 hover:border-gray-200'}`}>
-                      {r}
-                    </button>
-                  ))}
-                </div>
-
-                {/* Indicators & controls */}
-                <div className="mt-2 sm:mt-0 sm:ml-4 flex items-center gap-3">
-                  <div className="text-xs text-gray-500">Samples: <span className="font-medium text-gray-900">{priceHistory.length}</span></div>
-                  <div className="text-xs text-gray-500">Last: <span className="font-medium text-gray-900">{lastUpdatedTs ? new Date(lastUpdatedTs).toLocaleTimeString() : '-'}</span></div>
-                  <button onClick={() => {
-                    // simulate sample data: generate 30 points spaced 10s apart
-                    const now = Date.now();
-                    const base = priceHistory.length > 0 ? priceHistory[priceHistory.length - 1].price : 0.1;
-                    const samples: Array<{ ts: number; price: number }> = [];
-                    for (let i = 29; i >= 0; i--) {
-                      const ts = now - i * 10000;
-                      // small random walk
-                      const noise = (Math.random() - 0.5) * base * 0.002;
-                      const price = Math.max(0, base + noise);
-                      samples.push({ ts, price });
-                    }
-                    setPriceHistory((prev) => {
-                      const merged = prev.concat(samples);
-                      const cutoff = Date.now() - maxHistoryMinutes * 60_000;
-                      const pruned = merged.filter((p) => p.ts >= cutoff);
-                      setLastUpdatedTs(Date.now());
-                      return pruned;
-                    });
-                  }} className="px-2 py-1 rounded bg-gray-50 border border-gray-200 text-xs">Simulate</button>
-                  <button onClick={() => { setPriceHistory([]); setLastUpdatedTs(null); }} className="px-2 py-1 rounded bg-white border border-gray-100 text-xs">Clear</button>
-                </div>
-              </div>
-              <div className="text-xs text-gray-500">{priceHistory.length > 0 ? `${priceHistory[priceHistory.length - 1].price.toLocaleString(undefined, { maximumFractionDigits: 6 })} (human)` : '-'}</div>
-            </div>
-
-            {/* Responsive chart container: chart will fill available width */}
-            <div style={{ width: '100%' }}>
-              {/* Determine displayed history based on selected range */}
-              {(() => {
-                const now = Date.now();
-                let windowMs = 0;
-                if (chartRange === '1m') windowMs = 60_000;
-                else if (chartRange === '5m') windowMs = 5 * 60_000;
-                else if (chartRange === '10m') windowMs = 10 * 60_000;
-                else if (chartRange === '1d') windowMs = 24 * 60 * 60_000; // 1 day
-                else if (chartRange === '7d') windowMs = 7 * 24 * 60 * 60_000; // 7 days
-                else if (chartRange === '1mo') windowMs = 30 * 24 * 60 * 60_000; // ~30 days
-                else if (chartRange === '3mo') windowMs = 90 * 24 * 60 * 60_000; // ~90 days
-                else if (chartRange === '1y') windowMs = 365 * 24 * 60 * 60_000; // ~365 days
-                // if 'all' windowMs stays 0 -> show full history
-                const displayed = windowMs > 0 ? priceHistory.filter((p) => (now - p.ts) <= windowMs) : priceHistory.slice();
-                return <PriceChart data={displayed} height={96} />;
-              })()}
-            </div>
-          </div>
           {/* Quick Trade and Order Book side-by-side on md+ */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div>
