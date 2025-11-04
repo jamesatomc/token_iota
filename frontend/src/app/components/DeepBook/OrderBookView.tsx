@@ -24,6 +24,8 @@ interface OrderBookViewProps {
   baseToken: string;
   quoteToken: string;
   baseDecimals?: number;
+  // optional handler when user clicks a price in the book
+  onSelectPrice?: (priceNorm: string, side: "bid" | "ask") => void;
 }
 
 export default function OrderBookView({
@@ -31,6 +33,7 @@ export default function OrderBookView({
   baseToken,
   quoteToken,
   baseDecimals = 9,
+  onSelectPrice,
 }: OrderBookViewProps) {
   const [bids, setBids] = useState<Order[]>([]);
   const [asks, setAsks] = useState<Order[]>([]);
@@ -236,8 +239,8 @@ export default function OrderBookView({
           <button
             onClick={() => setShowMyOrders(!showMyOrders)}
             className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${showMyOrders
-                ? "bg-blue-600 text-white"
-                : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+              ? "bg-blue-600 text-white"
+              : "bg-gray-100 text-gray-700 hover:bg-gray-200"
               }`}
           >
             {showMyOrders ? "📋 My Orders" : "📊 All Orders"}
@@ -274,8 +277,8 @@ export default function OrderBookView({
                   <div
                     key={bid.id}
                     className={`p-3 rounded-lg border ${isMyOrder
-                        ? "border-blue-300 bg-blue-50"
-                        : "border-gray-200 bg-white"
+                      ? "border-blue-300 bg-blue-50"
+                      : "border-gray-200 bg-white"
                       }`}
                   >
                     <div className="flex flex-col sm:flex-row items-start justify-between">
@@ -293,8 +296,15 @@ export default function OrderBookView({
                         <div className="grid grid-cols-2 gap-2 text-sm">
                           <div>
                             <div className="text-xs text-gray-500">Price</div>
-                            <div className="font-semibold text-green-700">
-                              {formatPrice(bid.price)}
+                            <div>
+                              <button
+                                type="button"
+                                onClick={() => onSelectPrice && onSelectPrice(bid.price, "bid")}
+                                className="font-semibold text-green-700 cursor-pointer hover:underline"
+                                title={`Use price ${formatPrice(bid.price)} (click to populate)`}
+                              >
+                                {formatPrice(bid.price)}
+                              </button>
                             </div>
                           </div>
                           <div>
@@ -349,8 +359,8 @@ export default function OrderBookView({
                   <div
                     key={ask.id}
                     className={`p-3 rounded-lg border ${isMyOrder
-                        ? "border-blue-300 bg-blue-50"
-                        : "border-gray-200 bg-white"
+                      ? "border-blue-300 bg-blue-50"
+                      : "border-gray-200 bg-white"
                       }`}
                   >
                     <div className="flex flex-col sm:flex-row items-start justify-between">
@@ -368,8 +378,15 @@ export default function OrderBookView({
                         <div className="grid grid-cols-2 gap-2 text-sm">
                           <div>
                             <div className="text-xs text-gray-500">Price</div>
-                            <div className="font-semibold text-red-700">
-                              {formatPrice(ask.price)}
+                            <div>
+                              <button
+                                type="button"
+                                onClick={() => onSelectPrice && onSelectPrice(ask.price, "ask")}
+                                className="font-semibold text-red-700 cursor-pointer hover:underline"
+                                title={`Use price ${formatPrice(ask.price)} (click to populate)`}
+                              >
+                                {formatPrice(ask.price)}
+                              </button>
                             </div>
                           </div>
                           <div>
