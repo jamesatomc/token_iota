@@ -5,8 +5,9 @@
   # Netlify runs this on a Linux builder; the curl installer will install Bun into $HOME/.bun
   # If you prefer npm, replace this with: "npm ci && npm run build"
   command = "curl -fsSL https://bun.sh/install | bash && export BUN_INSTALL=\"$HOME/.bun\" && export PATH=\"$BUN_INSTALL/bin:$PATH\" && bun install && bun run build"
-  # the Netlify Next plugin will determine the correct publish output; plugin reads .next
-  publish = "frontend/.next"
+  # When `base = "frontend"` the publish path should be relative to that base.
+  # Setting it to ".next" prevents Netlify from resolving to frontend/frontend/.next
+  publish = ".next"
 
 [[plugins]]
   package = "@netlify/plugin-nextjs"
