@@ -1,0 +1,10 @@
+[build]
+  # build from the frontend folder
+  base = "frontend"
+  # install deps and run Next.js build
+  command = "npm ci && npm run build"
+  # let the Netlify Next plugin determine the correct publish output
+  publish = "frontend/.next"
+
+[[plugins]]
+  package = "@netlify/plugin-nextjs"
