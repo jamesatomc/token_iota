@@ -30,9 +30,7 @@ export default function Home() {
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
             {/* left: logo + title */}
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-amber-400 rounded-xl flex items-center justify-center shrink-0">
-                <span className="text-white font-bold text-lg">K</span>
-              </div>
+              <img src="/kanari.svg" alt="Kanari logo" className="w-10 h-10 rounded-xl shrink-0" />
               <div>
                 <h1 className="text-lg sm:text-xl font-bold text-gray-900">Kanari Network DEX</h1>
                 <p className="text-xs text-gray-600">Swap tokens, provide liquidity, or mint — fast and simple.</p>

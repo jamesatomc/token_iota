@@ -959,7 +959,7 @@ export default function DeepBookInterface() {
         )}
       </Card>
 
-      /* Two-column layout: Order Book | Chart */
+      {/* Two-column layout: Order Book | Chart */}
       {(bookId && bookId.trim() !== "") || (bookSelect && bookSelect !== "" && bookSelect !== "manual") ? (
         <div className="mt-6">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
