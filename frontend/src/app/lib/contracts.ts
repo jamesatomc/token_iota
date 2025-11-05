@@ -1,13 +1,13 @@
 // Contract addresses and configuration
 export const CONTRACTS = {
   // Replace with your deployed package ID
-  PACKAGE_ID: "0x56a20683946c17b80a5260ea8b5eac74c595e0615fe249364f1480dff04cb74f",
+  PACKAGE_ID: "0xc167714bed231fd49d8cc7538b90e325d7b8d264985f67d7a2ee9080dad637c9",
   
   // Global Pool Registry ID (create once with create_registry function in DEX)
-  REGISTRY_DEX_ID: "0x894d568bef7f6348a51c2594fdbe7b401d9d43f4b32f50379b6b8f7cd4aa1f83", // Paste your GlobalPoolRegistry object ID here after calling create_registry
+  REGISTRY_DEX_ID: "0x53086b67c1f56dd20313cdbf40068bc9b098cec3dc614a0f04fa266657998a37", // Paste your GlobalPoolRegistry object ID here after calling create_registry
 
   // Global OrderBook Registry ID (create once with create_global_registry function in DeepBook)
-  REGISTRY_BOOK_ID: "0x1712f530d8a3b791284a9bc2802e8577126974199f461bea58219cbff1ca993c", // Paste your GlobalOrderBookRegistry object ID here after calling create_global_registry
+  REGISTRY_BOOK_ID: "0x1f68de7a3fe6deb5a0da34f16f7dd5058bc43a1a5b8c62373318ffaa17fb1f46", // Paste your GlobalOrderBookRegistry object ID here after calling create_global_registry
 
   // // KANARI Token
   // KANARI: {
