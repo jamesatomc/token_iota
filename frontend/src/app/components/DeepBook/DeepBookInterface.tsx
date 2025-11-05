@@ -556,6 +556,20 @@ export default function DeepBookInterface() {
     }
   }, [signAndExecute, client, currentAccount, bookId, baseToken, quoteToken, price, quantity, side, orderType, getCoinInput]);
 
+  // Handler to populate order form when a price in the order book is clicked
+  const handleSelectPriceFromBook = useCallback((priceNorm: string, selectedSide: "bid" | "ask") => {
+    try {
+      setSide(selectedSide);
+      setPrice(priceNorm);
+      const human = Number(BigInt(priceNorm)) / Number(DEEPBOOK.PRICE_SCALE as number);
+      // Format with up to 9 decimals and trim trailing zeros
+      const humanStr = (Number.isInteger(human) ? human.toString() : human.toFixed(9).replace(/\.?0+$/, ""));
+      setHumanPrice(humanStr);
+    } catch (err) {
+      console.warn("Failed to set price from book click", err);
+    }
+  }, [setSide, setPrice, setHumanPrice]);
+
   return (
     <div className="min-h-[420px] w-full max-w-6xl mx-auto px-2 sm:px-4">
       <Card maxWidth="max-w-6xl" className="mx-auto">
@@ -945,20 +959,33 @@ export default function DeepBookInterface() {
         )}
       </Card>
 
-      {/* Quick Trade & Order Book View */}
+      /* Two-column layout: Order Book | Chart */
       {(bookId && bookId.trim() !== "") || (bookSelect && bookSelect !== "" && bookSelect !== "manual") ? (
-        <div className="mt-6 space-y-6">
-          {/* TradingView Chart */}
-          <TradingViewChart
-            bookId={bookId || bookSelect}
-            baseSymbol={DEFAULT_TOKENS.find((t) => t.type === baseToken)?.symbol || baseToken.split("::").pop() || "BASE"}
-            quoteSymbol={DEFAULT_TOKENS.find((t) => t.type === quoteToken)?.symbol || quoteToken.split("::").pop() || "QUOTE"}
-            priceData={priceHistory}
-          />
-
-          {/* Quick Trade and Order Book side-by-side on md+ */}
+        <div className="mt-6">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* Left: Order Book */}
             <div>
+              <OrderBookView
+                bookId={bookId || bookSelect}
+                baseToken={baseToken}
+                quoteToken={quoteToken}
+                baseDecimals={getDecimals(baseToken)}
+                onSelectPrice={handleSelectPriceFromBook}
+              />
+            </div>
+
+            {/* Right: Chart */}
+            <div>
+              <TradingViewChart
+                bookId={bookId || bookSelect}
+                baseSymbol={DEFAULT_TOKENS.find((t) => t.type === baseToken)?.symbol || baseToken.split("::").pop() || "BASE"}
+                quoteSymbol={DEFAULT_TOKENS.find((t) => t.type === quoteToken)?.symbol || quoteToken.split("::").pop() || "QUOTE"}
+                priceData={priceHistory}
+              />
+            </div>
+
+            {/* Right: Quick Trade and compact controls */}
+            <div className="space-y-6">
               <QuickTrade
                 bookId={bookId || bookSelect}
                 baseToken={baseToken}
@@ -970,15 +997,22 @@ export default function DeepBookInterface() {
                 baseBalance={baseBalance}
                 quoteBalance={quoteBalance}
               />
-            </div>
 
-            <div>
-              <OrderBookView
-                bookId={bookId || bookSelect}
-                baseToken={baseToken}
-                quoteToken={quoteToken}
-                baseDecimals={getDecimals(baseToken)}
-              />
+              {/* Small summary card to show selected pair and quick actions */}
+              <Card>
+                <div className="text-sm text-gray-600">
+                  <div className="font-semibold text-gray-900">Pair</div>
+                  <div className="mt-1 text-sm text-gray-700">{DEFAULT_TOKENS.find((t) => t.type === baseToken)?.symbol || baseToken.split("::").pop()} / {DEFAULT_TOKENS.find((t) => t.type === quoteToken)?.symbol || quoteToken.split("::").pop()}</div>
+                  <div className="mt-3">
+                    <div className="text-xs text-gray-500">Best Bid</div>
+                    <div className="font-medium text-green-700">{bestBidPrice && bestBidPrice !== "0" ? (Number(BigInt(bestBidPrice)) / Number(BigInt(DEEPBOOK.PRICE_SCALE as number))).toFixed(6) : 'N/A'}</div>
+                  </div>
+                  <div className="mt-3">
+                    <div className="text-xs text-gray-500">Best Ask</div>
+                    <div className="font-medium text-red-700">{bestAskPrice && bestAskPrice !== "0" ? (Number(BigInt(bestAskPrice)) / Number(BigInt(DEEPBOOK.PRICE_SCALE as number))).toFixed(6) : 'N/A'}</div>
+                  </div>
+                </div>
+              </Card>
             </div>
           </div>
         </div>
