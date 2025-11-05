@@ -31,7 +31,7 @@ export default function DeepBookInterface() {
   const [bookId, setBookId] = useState("");
   const [lastCreatedId, setLastCreatedId] = useState<string | null>(null);
   const [bookSelect, setBookSelect] = useState("");
-  const [baseToken, setBaseToken] = useState(CONTRACTS.KANARI.TYPE);
+  const [baseToken, setBaseToken] = useState(CONTRACTS.IOTA.TYPE);
   const [quoteToken, setQuoteToken] = useState(CONTRACTS.IOTA.TYPE);
   const [showSelectorBase, setShowSelectorBase] = useState(false);
   const [showSelectorQuote, setShowSelectorQuote] = useState(false);

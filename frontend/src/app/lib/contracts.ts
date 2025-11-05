@@ -9,19 +9,19 @@ export const CONTRACTS = {
   // Global OrderBook Registry ID (create once with create_global_registry function in DeepBook)
   REGISTRY_BOOK_ID: "0x1712f530d8a3b791284a9bc2802e8577126974199f461bea58219cbff1ca993c", // Paste your GlobalOrderBookRegistry object ID here after calling create_global_registry
 
-  // KANARI Token
-  KANARI: {
-    TREASURY_CAP: "0xade03531fb4f969da74f6ed3d2008d4db6f1e1677930f066abcaf4d5a4d3d28c",
-    METADATA: "0x9ff3d7efc1ad6b5d5f622e43dc5111bc8458e11af23d963f01a05438e3ab84d8",
-    TYPE: "0x56a20683946c17b80a5260ea8b5eac74c595e0615fe249364f1480dff04cb74f::KANARI::KANARI",
-  },
+  // // KANARI Token
+  // KANARI: {
+  //   TREASURY_CAP: "0xade03531fb4f969da74f6ed3d2008d4db6f1e1677930f066abcaf4d5a4d3d28c",
+  //   METADATA: "0x9ff3d7efc1ad6b5d5f622e43dc5111bc8458e11af23d963f01a05438e3ab84d8",
+  //   TYPE: "0x56a20683946c17b80a5260ea8b5eac74c595e0615fe249364f1480dff04cb74f::KANARI::KANARI",
+  // },
 
-    // KANARI Token
-  USDC: {
-    TREASURY_CAP: "0xf32c14f7ab0a55c4ae5a11c084aa74dcb78d20a2d58c8b833ac2e74162201c6a",
-    METADATA: "0xb160c595c672a5e00ad5451b66e02485a4e1f31a2ee1f0477192c83bfdf6484a",
-    TYPE: "0x56a20683946c17b80a5260ea8b5eac74c595e0615fe249364f1480dff04cb74f::USDC::USDC",
-  },
+  //   // KANARI Token
+  // USDC: {
+  //   TREASURY_CAP: "0xf32c14f7ab0a55c4ae5a11c084aa74dcb78d20a2d58c8b833ac2e74162201c6a",
+  //   METADATA: "0xb160c595c672a5e00ad5451b66e02485a4e1f31a2ee1f0477192c83bfdf6484a",
+  //   TYPE: "0x56a20683946c17b80a5260ea8b5eac74c595e0615fe249364f1480dff04cb74f::USDC::USDC",
+  // },
   
   
   // IOTA Token
@@ -61,11 +61,11 @@ export type TokenItem = {
 
 // Default tokens shown in selectors (can be extended by TokenManager/custom tokens)
 export const DEFAULT_TOKENS: TokenItem[] = [
-  // Example: KANARI uses a path relative to `public/`
-  { type: CONTRACTS.KANARI.TYPE, symbol: "KANARI", name: "Kanari Token", decimals: 9, logo: "https://avatars.githubusercontent.com/u/127471673?s=400&u=28db99d5575a4824ce011a32a8dacf729b64ba57&v=4", verified: true },
+  // // Example: KANARI uses a path relative to `public/`
+  // { type: CONTRACTS.KANARI.TYPE, symbol: "KANARI", name: "Kanari Token", decimals: 9, logo: "https://avatars.githubusercontent.com/u/127471673?s=400&u=28db99d5575a4824ce011a32a8dacf729b64ba57&v=4", verified: true },
 
-  // Example: USDC uses a path relative to `public/`
-  { type: CONTRACTS.USDC.TYPE, symbol: "USDC", name: "USD Coin", decimals: 6, logo: "https://s2.coinmarketcap.com/static/img/coins/64x64/3408.png", verified: true },
+  // // Example: USDC uses a path relative to `public/`
+  // { type: CONTRACTS.USDC.TYPE, symbol: "USDC", name: "USD Coin", decimals: 6, logo: "https://s2.coinmarketcap.com/static/img/coins/64x64/3408.png", verified: true },
   // Example: IOTA uses an absolute URL to demonstrate external logo hosting
   { type: CONTRACTS.IOTA.TYPE, symbol: "IOTA", name: "IOTA", decimals: 9, logo: "https://s2.coinmarketcap.com/static/img/coins/64x64/1720.png", verified: true },
 ];

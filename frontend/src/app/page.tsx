@@ -7,19 +7,16 @@ import LiquidityInterface from "./components/LiquidityInterface";
 import CreatePool from "./components/CreatePool";
 import PoolInfo from "./components/PoolInfo";
 import DeepBookInterface from "./components/DeepBook/DeepBookInterface";
-// WalletBalance intentionally unused in layout; uncomment and use in sidebar when needed
-// import WalletBalance from "./components/WalletBalance";
-import MintKanari from "./components/MintKanari";
+
 
 export default function Home() {
-  const [activeTab, setActiveTab] = useState<"swap" | "liquidity" | "pool" | "info" | "mint" | "deepbook">("swap");
+  const [activeTab, setActiveTab] = useState<"swap" | "liquidity" | "pool" | "info" | "deepbook">("swap");
 
   // typed tab keys to avoid `any`
-  type TabKey = "swap" | "liquidity" | "mint" | "pool" | "info" | "deepbook";
+  type TabKey = "swap" | "liquidity" | "pool" | "info" | "deepbook";
   const tabs: { key: TabKey; label: string }[] = [
     { key: "swap", label: "Swap" },
     { key: "liquidity", label: "Add" },
-    { key: "mint", label: "Mint" },
     { key: "deepbook", label: "DeepBook" },
     { key: "pool", label: "Create Pool" },
     { key: "info", label: "Pool Info" },
@@ -78,7 +75,6 @@ export default function Home() {
           <div className="w-full md:flex-1">
             {activeTab === "swap" && <SwapInterface />}
             {activeTab === "liquidity" && <LiquidityInterface />}
-            {activeTab === "mint" && <MintKanari />}
             {activeTab === "deepbook" && <DeepBookInterface />}
             {activeTab === "pool" && <CreatePool />}
             {activeTab === "info" && <PoolInfo />}

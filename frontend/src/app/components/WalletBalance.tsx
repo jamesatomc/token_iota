@@ -27,7 +27,7 @@ export default function WalletBalance() {
     "getBalance",
     {
       owner: currentAccount?.address || "",
-      coinType: CONTRACTS.KANARI.TYPE,
+      coinType: CONTRACTS.IOTA.TYPE,
     },
     {
       enabled: !!currentAccount,

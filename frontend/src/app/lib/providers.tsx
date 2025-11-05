@@ -17,7 +17,7 @@ const queryClient = new QueryClient();
 export default function Providers({ children }: { children: React.ReactNode }) {
   return (
     <QueryClientProvider client={queryClient}>
-      <IotaClientProvider networks={networkConfig} defaultNetwork="testnet">
+      <IotaClientProvider networks={networkConfig} defaultNetwork="mainnet">
         <WalletProvider autoConnect>{children}</WalletProvider>
       </IotaClientProvider>
     </QueryClientProvider>

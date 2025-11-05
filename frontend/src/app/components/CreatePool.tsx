@@ -11,7 +11,7 @@ import Card from "./UI/Card";
 
 export default function CreatePool() {
   const [feeType, setFeeType] = useState<"low" | "med" | "high">("med");
-  const [tokenXType, setTokenXType] = useState(CONTRACTS.KANARI.TYPE);
+  const [tokenXType, setTokenXType] = useState(CONTRACTS.IOTA.TYPE);
   const [tokenYType, setTokenYType] = useState(CONTRACTS.IOTA.TYPE);
   const [loading, setLoading] = useState(false);
   const [showSelectorX, setShowSelectorX] = useState(false);
