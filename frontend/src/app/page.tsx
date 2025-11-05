@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { ConnectButton } from "@iota/dapp-kit";
+import Image from "next/image";
 import SwapInterface from "./components/SwapInterface";
 import LiquidityInterface from "./components/LiquidityInterface";
 import CreatePool from "./components/CreatePool";
@@ -29,8 +30,8 @@ export default function Home() {
         <div className="container mx-auto px-4 py-3">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
             {/* left: logo + title */}
-            <div className="flex items-center gap-3">
-              <img src="/kanari.svg" alt="Kanari logo" className="w-10 h-10 rounded-xl shrink-0" />
+              <div className="flex items-center gap-3">
+              <Image src="/kanari.svg" alt="Kanari logo" className="rounded-xl shrink-0" width={40} height={40} />
               <div>
                 <h1 className="text-lg sm:text-xl font-bold text-gray-900">Kanari Network DEX</h1>
                 <p className="text-xs text-gray-600">Swap tokens, provide liquidity, or mint — fast and simple.</p>

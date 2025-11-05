@@ -1,9 +1,11 @@
 [build]
   # build from the frontend folder
   base = "frontend"
-  # install deps and run Next.js build
-  command = "npm ci && npm run build"
-  # let the Netlify Next plugin determine the correct publish output
+  # Use Bun on Netlify: install Bun, add it to PATH, then install deps and build.
+  # Netlify runs this on a Linux builder; the curl installer will install Bun into $HOME/.bun
+  # If you prefer npm, replace this with: "npm ci && npm run build"
+  command = "curl -fsSL https://bun.sh/install | bash && export BUN_INSTALL=\"$HOME/.bun\" && export PATH=\"$BUN_INSTALL/bin:$PATH\" && bun install && bun run build"
+  # the Netlify Next plugin will determine the correct publish output; plugin reads .next
   publish = "frontend/.next"
 
 [[plugins]]

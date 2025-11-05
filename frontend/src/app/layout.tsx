@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
-import Image from "next/image";
+// import Image from "next/image"; // Commenting out unused import
 import "./globals.css";
 import '@iota/dapp-kit/dist/index.css';
 import Providers from './lib/providers';
